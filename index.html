@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SEPA 持倉">
+<title>SEPA 持倉管理</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070810;--bg2:#0c0d1a;--card:#0f1020;--bdr:#1e2035;--bdr2:#2a2c48;
+  --text:#dde0f5;--muted:#52557a;--dim:#2c2e4a;
+  --green:#00f08a;--grn2:#00b865;--red:#ff3d5a;--amber:#ffb020;--blue:#4d9fff;--purp:#b07aff;
+  --mono:'DM Mono',monospace;--sans:'Outfit',sans-serif;
+  --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:-webkit-fill-available}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);
+  min-height:100vh;min-height:-webkit-fill-available;
+  overflow-x:hidden;-webkit-font-smoothing:antialiased;
+  padding-bottom:calc(90px + var(--sab))}
+
+/* HEADER */
+.hdr{background:rgba(7,8,16,.93);backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--bdr);
+  padding:calc(var(--sat) + 14px) 16px 14px;
+  position:sticky;top:0;z-index:100}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.hdr-title{font-size:11px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--green)}
+.hdr-sub{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px}
+.hdr-btns{display:flex;gap:8px}
+.btn-icon{background:var(--card);border:1px solid var(--bdr2);color:var(--muted);
+  border-radius:20px;padding:0 14px;font-family:var(--mono);font-size:11px;
+  cursor:pointer;display:flex;align-items:center;gap:6px;height:44px;min-width:44px;
+  transition:border-color .2s,color .2s;user-select:none;-webkit-user-select:none;white-space:nowrap}
+.btn-icon:active{transform:scale(.95)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinning{display:inline-block;animation:spin .7s linear infinite}
+
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media(max-width:480px){.stats-row{grid-template-columns:repeat(2,1fr)}}
+.stat-box{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:10px 11px}
+.stat-label{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.stat-val{font-family:var(--mono);font-size:15px;font-weight:500}
+.last-upd{font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;margin-top:6px}
+
+/* MAIN */
+.main{max-width:860px;margin:0 auto;padding:18px 14px 20px}
+.sec-lbl{font-size:10px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;
+  letter-spacing:.18em;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sec-lbl::after{content:'';flex:1;height:1px;background:var(--bdr)}
+
+/* MARKET BAR */
+.mkt-bar{display:flex;align-items:center;gap:8px;padding:9px 13px;
+  background:var(--card);border:1px solid var(--bdr);border-radius:10px;
+  margin-bottom:20px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.mkt-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.mkt-dot.open{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s ease-in-out infinite}
+.mkt-dot.pre {background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.mkt-dot.aft {background:var(--blue)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* FORM */
+.add-section{margin-bottom:28px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:10px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+input[type="text"],input[type="date"]{
+  background:var(--card);border:1px solid var(--bdr);border-radius:10px;
+  color:var(--text);padding:12px 13px;font-family:var(--mono);font-size:16px;
+  outline:none;width:100%;-webkit-appearance:none;appearance:none;
+  transition:border-color .15s;min-height:48px;caret-color:var(--green)}
+input:focus{border-color:var(--green)}
+input::placeholder{color:var(--dim)}
+input[type="date"]{color:var(--text)}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
+.btn-primary{background:var(--green);color:#000;border:none;border-radius:12px;
+  padding:14px 22px;font-family:var(--sans);font-size:15px;font-weight:700;
+  cursor:pointer;width:100%;min-height:52px;letter-spacing:.04em;
+  user-select:none;-webkit-user-select:none;transition:opacity .15s,transform .1s}
+.btn-primary:active{opacity:.75;transform:scale(.98)}
+
+/* CARDS */
+.positions-wrap{display:flex;flex-direction:column;gap:10px}
+.pos-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;overflow:hidden}
+.pos-card.sig-exit {border-left:3px solid var(--red)}
+.pos-card.sig-trim {border-left:3px solid var(--amber)}
+.pos-card.sig-run  {border-left:3px solid var(--purp)}
+.pos-card.sig-hold {border-left:3px solid var(--green)}
+.pos-card.sig-watch{border-left:3px solid var(--muted)}
+.pos-card.sig-add  {border-left:3px solid var(--blue)}
+
+.pos-main{display:grid;grid-template-columns:78px 1fr 72px;align-items:center;
+  gap:10px;padding:13px 13px;cursor:pointer;min-height:76px;user-select:none;-webkit-user-select:none}
+.pos-ticker{font-family:var(--mono);font-size:17px;font-weight:500;color:var(--green);letter-spacing:.04em}
+.pos-date{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+.pos-middle{min-width:0}
+.pos-pnl-row{display:flex;align-items:baseline;gap:7px;margin-bottom:5px;flex-wrap:wrap}
+.pos-pnl-usd{font-family:var(--mono);font-size:17px;font-weight:500}
+.pos-pnl-pct{font-family:var(--mono);font-size:12px}
+.pos-bar-track{height:3px;background:var(--dim);border-radius:3px;overflow:hidden;margin-bottom:6px}
+.pos-bar-fill{height:3px;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.pos-meta{display:flex;gap:10px;flex-wrap:wrap}
+.pos-meta-item{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.pos-meta-item span{color:var(--text)}
+.pos-right{text-align:right}
+.pos-current{font-family:var(--mono);font-size:15px;font-weight:500}
+.pos-entry-small{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px}
+.sig-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;
+  border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:500;
+  white-space:nowrap;letter-spacing:.03em;margin-top:4px}
+.sig-badge.exit {background:#300010;color:var(--red);border:1px solid #5a002055}
+.sig-badge.trim {background:#2a1a00;color:var(--amber);border:1px solid #7a500055}
+.sig-badge.run  {background:#1a0040;color:var(--purp);border:1px solid #4a1a8055}
+.sig-badge.hold {background:#001a0a;color:var(--green);border:1px solid #004a2055}
+.sig-badge.watch{background:var(--bg2);color:var(--muted);border:1px solid var(--bdr)}
+.sig-badge.add  {background:#001428;color:var(--blue);border:1px solid #1a4a8055}
+
+/* SHIMMER */
+.shimmer{background:linear-gradient(90deg,var(--dim) 25%,var(--bdr2) 50%,var(--dim) 75%);
+  background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:4px;display:inline-block}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* EXPANDED */
+.pos-detail{display:none;border-top:1px solid var(--bdr);padding:14px;background:var(--bg2)}
+.pos-card.expanded .pos-detail{display:block}
+.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+@media(max-width:400px){.detail-grid{grid-template-columns:1fr 1fr}}
+.dc{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:8px 10px}
+.dc-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.dc-val{font-family:var(--mono);font-size:14px;font-weight:500}
+
+/* SEPA ANALYSIS BOX */
+.analysis-box{background:var(--card);border:1px solid var(--bdr2);border-radius:10px;
+  padding:14px;margin-bottom:12px;border-left:3px solid var(--green)}
+.analysis-title{font-size:9px;font-family:var(--mono);color:var(--muted);
+  text-transform:uppercase;letter-spacing:.15em;margin-bottom:10px}
+.analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+@media(max-width:400px){.analysis-grid{grid-template-columns:1fr}}
+.analysis-item{background:var(--bg2);border-radius:6px;padding:8px 10px}
+.analysis-item-label{font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.07em}
+.analysis-item-val{font-size:13px;font-family:var(--mono);font-weight:500}
+.rationale{font-size:12px;font-family:var(--mono);color:#9a9dc0;line-height:1.8;
+  padding:10px 12px;background:var(--bg2);border-radius:8px;border-left:2px solid var(--bdr2)}
+
+.pos-notes{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;
+  padding:8px 10px;background:var(--card);border-radius:6px;border-left:2px solid var(--dim)}
+.detail-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn-sm{background:var(--card);border:1px solid var(--bdr2);color:var(--muted);
+  border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:12px;
+  cursor:pointer;min-height:44px;user-select:none;-webkit-user-select:none}
+.btn-sm:active{transform:scale(.96)}
+.btn-sm.danger:active{border-color:var(--red);color:var(--red)}
+
+/* EMPTY */
+.empty{text-align:center;padding:60px 20px;color:var(--dim)}
+.empty-icon{font-size:44px;margin-bottom:14px}
+.empty-title{font-size:16px;font-weight:700;margin-bottom:6px;color:var(--muted)}
+.empty-sub{font-size:12px;font-family:var(--mono)}
+
+/* EXPORT MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;
+  display:none;align-items:flex-end;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--bdr2);border-radius:20px 20px 0 0;
+  width:100%;max-width:600px;padding:20px 16px calc(20px + var(--sab));
+  display:flex;flex-direction:column;gap:12px;max-height:85vh}
+.modal-title{font-size:14px;font-weight:700;color:var(--text)}
+.modal-sub{font-size:11px;font-family:var(--mono);color:var(--muted);line-height:1.6}
+.modal-json{background:var(--card);border:1px solid var(--bdr);border-radius:10px;
+  padding:12px;font-family:var(--mono);font-size:11px;color:var(--green);
+  white-space:pre;overflow:auto;max-height:200px;flex-shrink:1;line-height:1.5;
+  -webkit-overflow-scrolling:touch}
+.modal-btns{display:flex;gap:10px}
+.btn-copy{background:var(--green);color:#000;border:none;border-radius:10px;
+  padding:13px;font-family:var(--sans);font-size:14px;font-weight:700;
+  cursor:pointer;flex:1;min-height:48px;user-select:none;-webkit-user-select:none}
+.btn-copy:active{opacity:.75}
+.btn-close-modal{background:var(--card);border:1px solid var(--bdr2);color:var(--muted);
+  border-radius:10px;padding:13px 18px;font-family:var(--mono);font-size:13px;
+  cursor:pointer;min-height:48px;user-select:none;-webkit-user-select:none}
+.btn-close-modal:active{transform:scale(.96)}
+
+/* TOAST */
+.toast{position:fixed;bottom:calc(24px + var(--sab));left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--bg2);border:1px solid var(--bdr2);border-radius:10px;
+  padding:12px 22px;font-family:var(--mono);font-size:13px;color:var(--text);
+  z-index:999;transition:transform .3s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <div>
+      <div class="hdr-title">📊 SEPA 持倉管理</div>
+      <div class="hdr-sub" id="hdr-sub">Minervini · $8,000 USD</div>
+    </div>
+    <div class="hdr-btns">
+      <button type="button" class="btn-icon" id="btn-export">📋 <span>匯出</span></button>
+      <button type="button" class="btn-icon" id="btn-refresh"><span id="ri">↻</span> <span id="rl">更新</span></button>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-label">持倉市值</div><div class="stat-val" id="s-val" style="color:var(--text)">—</div></div>
+    <div class="stat-box"><div class="stat-label">總損益</div><div class="stat-val" id="s-pnl">—</div></div>
+    <div class="stat-box"><div class="stat-label">已投入</div><div class="stat-val" id="s-dep" style="color:var(--amber)">—</div></div>
+    <div class="stat-box"><div class="stat-label">最大虧損</div><div class="stat-val" id="s-loss" style="color:var(--red)">—</div></div>
+  </div>
+  <div class="last-upd" id="last-upd"></div>
+</div>
+
+<div class="main">
+  <div class="mkt-bar">
+    <div class="mkt-dot" id="mkt-dot"></div>
+    <span id="mkt-st" style="flex:1">—</span>
+    <span id="mkt-tm" style="color:var(--dim)"></span>
+  </div>
+
+  <div class="add-section">
+    <div class="sec-lbl">新增持倉</div>
+    <div class="form-grid">
+      <div class="field"><label>代號</label>
+        <input type="text" id="f-ticker" placeholder="NVDA" autocapitalize="characters" autocorrect="off" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label>進場價 USD</label>
+        <input type="text" inputmode="decimal" id="f-entry" placeholder="107.00" autocomplete="off"></div>
+      <div class="field"><label>股數</label>
+        <input type="text" inputmode="decimal" id="f-shares" placeholder="10" autocomplete="off"></div>
+      <div class="field"><label>停損價 USD</label>
+        <input type="text" inputmode="decimal" id="f-stop" placeholder="99.50" autocomplete="off"></div>
+      <div class="field"><label>進場日期</label>
+        <input type="date" id="f-date"></div>
+      <div class="field"><label>備注（選填）</label>
+        <input type="text" id="f-notes" placeholder="VCP突破，量能1.8x" autocomplete="off"></div>
+    </div>
+    <button type="button" class="btn-primary" id="btn-add">＋ 加入持倉</button>
+  </div>
+
+  <div class="sec-lbl">持倉清單</div>
+  <div class="positions-wrap" id="pos-wrap">
+    <div class="empty" id="empty">
+      <div class="empty-icon">📭</div>
+      <div class="empty-title">尚無持倉</div>
+      <div class="empty-sub">輸入股票資訊後點擊「加入持倉」</div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div>
+      <div class="modal-title">📋 匯出持倉 JSON</div>
+      <div class="modal-sub">複製後貼入 GitHub Secret「PORTFOLIO_POSITIONS」，自動郵件即可讀取你的持倉</div>
+    </div>
+    <div class="modal-json" id="modal-json"></div>
+    <div class="modal-btns">
+      <button type="button" class="btn-copy" id="btn-copy">複製 JSON</button>
+      <button type="button" class="btn-close-modal" id="btn-mclose">關閉</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+// ── Config ────────────────────────────────────────────────────────────
+var FINNHUB_KEY = 'd7a565hr01qn9i7jmkk0d7a565hr01qn9i7jmkkg';
+var CAP = 8000;
+
+// ── Storage ───────────────────────────────────────────────────────────
+var _mem = {};
+var store = {
+  get: function(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return _mem[k]!=null?_mem[k]:null; } },
+  set: function(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ _mem[k]=v; } }
+};
+
+// ── State ─────────────────────────────────────────────────────────────
+var positions = store.get('sepa_positions') || [];
+var prices    = {};   // ticker → { price, prevClose, change1d, high, low, open, volume }
+var expanded  = null;
+var loading   = false;
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function pn(id){ var r=(document.getElementById(id).value||'').replace(/[^\d.]/g,''); var n=parseFloat(r); return isNaN(n)?0:n; }
+function f2(n,d){ return Number(n).toFixed(d==null?2:d); }
+function money(n){ var a=Math.abs(Math.round(n)); return (n<0?'-$':'$')+a.toLocaleString(); }
+function ppct(n){ return (n>=0?'+':'')+f2(n,1)+'%'; }
+function pcol(n){ return n>0?'var(--green)':n<0?'var(--red)':'var(--muted)'; }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function fmtVol(v){ if(!v)return'—'; if(v>=1e6)return f2(v/1e6,2)+'M'; if(v>=1e3)return f2(v/1e3,1)+'K'; return String(v); }
+
+function toast(msg,ms){
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(function(){ el.classList.remove('show'); }, ms||2500);
+}
+
+// ── Market status (ET) ────────────────────────────────────────────────
+function etNow(){
+  var now=new Date(), jan=new Date(now.getFullYear(),0,1), jul=new Date(now.getFullYear(),6,1);
+  var std=Math.max(jan.getTimezoneOffset(),jul.getTimezoneOffset());
+  var dst=now.getTimezoneOffset()<std, off=dst?-4:-5;
+  return new Date(now.getTime()+(now.getTimezoneOffset()+off*60)*60000);
+}
+function updateMkt(){
+  var dot=document.getElementById('mkt-dot'), st=document.getElementById('mkt-st'), tm=document.getElementById('mkt-tm');
+  var et=etNow(), day=et.getDay(), h=et.getHours(), m=et.getMinutes(), mins=h*60+m;
+  var wknd=day===0||day===6, open=!wknd&&mins>=570&&mins<960, pre=!wknd&&mins>=240&&mins<570, aft=!wknd&&mins>=960&&mins<1200;
+  dot.className='mkt-dot';
+  if(open){ dot.classList.add('open'); st.textContent='市場開盤中 (ET)'; st.style.color='var(--green)'; }
+  else if(pre){ dot.classList.add('pre'); st.textContent='盤前交易 (ET)'; st.style.color='var(--amber)'; }
+  else if(aft){ dot.classList.add('aft'); st.textContent='盤後交易 (ET)'; st.style.color='var(--blue)'; }
+  else{ st.textContent=wknd?'週末休市':'市場休市'; st.style.color='var(--muted)'; }
+  tm.textContent=String(et.getHours()).padStart(2,'0')+':'+String(et.getMinutes()).padStart(2,'0')+' ET';
+}
+updateMkt(); setInterval(updateMkt, 30000);
+
+// ── Finnhub price fetch ───────────────────────────────────────────────
+function fetchOne(ticker){
+  // quote endpoint: price, change, % change, high, low, open, prevClose
+  return fetch('https://finnhub.io/api/v1/quote?symbol='+encodeURIComponent(ticker)+'&token='+FINNHUB_KEY)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d || !d.c) throw new Error('no data');
+      return {
+        price:    d.c,          // current price
+        prevClose:d.pc,         // previous close
+        change1d: d.c&&d.pc ? (d.c-d.pc)/d.pc*100 : 0,
+        high:     d.h,
+        low:      d.l,
+        open:     d.o,
+        volume:   null          // Finnhub free quote doesn't include volume
+      };
+    });
+}
+
+function fetchAll(cb){
+  var tickers = [];
+  positions.forEach(function(p){ if(tickers.indexOf(p.ticker)<0) tickers.push(p.ticker); });
+  if(!tickers.length){ cb&&cb(); return; }
+
+  var done=0, total=tickers.length;
+
+  // Finnhub free plan: 60 req/min — stagger by 100ms to be safe
+  tickers.forEach(function(t, i){
+    setTimeout(function(){
+      fetchOne(t)
+        .then(function(d){ prices[t]=d; })
+        .catch(function(e){ console.warn(t,'fetch failed',e); })
+        .finally(function(){
+          done++;
+          if(done===total){
+            var ts=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+            document.getElementById('last-upd').textContent='最後更新 '+ts;
+            cb&&cb();
+          }
+        });
+    }, i*120);
+  });
+}
+
+// ── SEPA Analysis (local, instant, no API cost) ───────────────────────
+function buildAnalysis(pos, pd){
+  var cur = pd.price;
+  var pp  = (cur - pos.entry) / pos.entry * 100;
+  var sg  = (cur - pos.stop) / cur * 100;
+  var ml  = (pos.entry - pos.stop) * pos.shares;
+  var rv  = (pos.entry - pos.stop) > 0 ? ((pd.price - pos.entry) / (pos.entry - pos.stop)) : 0;
+  var days = Math.round((Date.now() - new Date(pos.date).getTime()) / 86400000);
+
+  // Signal
+  var sig, sigCls, rationale;
+  if(cur <= pos.stop || pp < -10){
+    sig='🔴 立即出場'; sigCls='exit';
+    rationale='現價 $'+f2(cur)+' 已觸及停損 $'+f2(pos.stop)+'。依 Minervini 紀律不問理由立即出場，保護本金優先。';
+  } else if(pp >= 40){
+    sig='🏆 超級強勢'; sigCls='run';
+    rationale='獲利 '+ppct(pp)+'，進入超級強勢區。停損提高至近期支撐或10週均線，讓利潤繼續奔跑。大漲的股票往往繼續漲。';
+  } else if(pp >= 20){
+    var ns=f2(pos.entry*1.02);
+    sig='🟡 部分獲利'; sigCls='trim';
+    rationale='獲利 '+ppct(pp)+'，達 Minervini 第一目標 (+20%)。建議出售 ⅓ 鎖定利潤，停損移至 $'+ns+'（成本+2%）保護剩餘部位。';
+  } else if(pp >= 5 && sg >= 3){
+    sig='🟢 趨勢持有'; sigCls='hold';
+    rationale='持倉健康，獲利 '+ppct(pp)+'，距停損仍有 '+f2(sg,1)+'% 緩衝。趨勢完好，無需操作，繼續讓市場發展。';
+  } else if(pp >= -2 && pp < 5 && sg >= 4){
+    sig='🔵 可加碼'; sigCls='add';
+    rationale='接近進場點，整理健康（距停損 '+f2(sg,1)+'%）。若出現 VCP 突破並伴隨量能≥1.5x，可加碼 50%。須確認大盤方向。';
+  } else if(pp < 0 && cur > pos.stop){
+    sig='⚪ 觀察中'; sigCls='watch';
+    rationale='小幅虧損（'+ppct(pp)+'），仍在停損 $'+f2(pos.stop)+' 上方 '+f2(sg,1)+'%。觀察量能和均線，若繼續走弱準備出場。';
+  } else {
+    sig='🟢 正常持有'; sigCls='hold';
+    rationale='持倉正常，繼續追蹤技術面發展。';
+  }
+
+  // Reward/Risk
+  var rrStr = rv > 0 ? '1:'+f2(rv,1) : '—';
+
+  // Day range position
+  var rangePos = (pd.high>pd.low) ? Math.round((cur-pd.low)/(pd.high-pd.low)*100) : 50;
+
+  return { sig:sig, sigCls:sigCls, rationale:rationale, rv:rv, rrStr:rrStr, ml:ml, days:days, sg:sg, pp:pp, rangePos:rangePos };
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function renderAll(){ renderStats(); renderPositions(); }
+
+function renderStats(){
+  var tv=0, tc=0, ml=0, n=positions.length;
+  positions.forEach(function(p){
+    var pd=prices[p.ticker], c=pd?pd.price:p.entry;
+    tv+=c*p.shares; tc+=p.entry*p.shares; ml+=(p.entry-p.stop)*p.shares;
+  });
+  var pnl=tv-tc, dep=CAP>0?tc/CAP*100:0;
+  var pe=document.getElementById('s-pnl');
+  pe.textContent=n?money(pnl):'—'; pe.style.color=n?pcol(pnl):'var(--muted)';
+  document.getElementById('s-val').textContent=n?money(tv):'—';
+  document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
+  document.getElementById('s-loss').textContent=n?money(-ml):'—';
+  document.getElementById('hdr-sub').textContent='Minervini · $'+CAP.toLocaleString()+' USD · '+n+' 筆持倉';
+}
+
+function renderPositions(){
+  var wrap=document.getElementById('pos-wrap'), emp=document.getElementById('empty');
+  if(!positions.length){ emp.style.display='block'; wrap.querySelectorAll('.pos-card').forEach(function(c){c.remove();}); return; }
+  emp.style.display='none';
+  var ex={}; wrap.querySelectorAll('.pos-card').forEach(function(el){ ex[el.getAttribute('data-id')]=el; });
+  Object.keys(ex).forEach(function(id){ if(!positions.find(function(p){return p.id===id;})) ex[id].remove(); });
+  positions.forEach(function(pos,idx){
+    var card=ex[pos.id];
+    if(!card){ card=document.createElement('div'); card.className='pos-card'; card.setAttribute('data-id',pos.id); wrap.appendChild(card); }
+    var ch=wrap.querySelectorAll('.pos-card'); if(ch[idx]!==card) wrap.insertBefore(card,ch[idx]||null);
+    renderCard(card,pos);
+  });
+}
+
+function renderCard(card, pos){
+  var pd=prices[pos.ticker], cur=pd?pd.price:null;
+  var pu=cur?(cur-pos.entry)*pos.shares:null, pp=cur?(cur-pos.entry)/pos.entry*100:null;
+  var pv=cur?cur*pos.shares:pos.entry*pos.shares, sg=cur?(cur-pos.stop)/cur*100:null;
+  var ie=expanded===pos.id;
+
+  // Quick badge (for card header — always instant)
+  var bkey='watch', bicon='⏳', blabel='載入報價中…';
+  if(cur){
+    var p2=pp||0, s2=sg||0;
+    if(cur<=pos.stop||p2<-10){ bkey='exit'; bicon='🔴'; blabel='立即出場'; }
+    else if(p2>=40){ bkey='run'; bicon='🏆'; blabel='讓利潤奔跑'; }
+    else if(p2>=20){ bkey='trim'; bicon='🟡'; blabel='出 ⅓ + 移停損'; }
+    else if(p2>=5&&s2>=3){ bkey='hold'; bicon='🟢'; blabel='持有'; }
+    else if(p2>=-2&&p2<5&&s2>=4){ bkey='add'; bicon='🔵'; blabel='可考慮加碼'; }
+    else if(p2<0&&cur>pos.stop){ bkey='watch'; bicon='⚪'; blabel='觀察中'; }
+    else{ bkey='hold'; bicon='🟢'; blabel='持有'; }
+  }
+
+  var bw=0, bc='var(--muted)';
+  if(pp!==null){ if(pp>=0){bw=Math.min(100,pp/50*100);bc=pp>=40?'var(--purp)':pp>=20?'var(--green)':'var(--grn2)';}else{bw=Math.min(100,Math.abs(pp)/10*100);bc='var(--red)';} }
+
+  card.className='pos-card sig-'+bkey+(ie?' expanded':'');
+
+  var c1col=pd?(pd.change1d>=0?'var(--green)':'var(--red)'):'var(--muted)';
+  var c1str=pd?(pd.change1d>=0?'+':'')+f2(pd.change1d,2)+'%':'—';
+  var curStr=cur?'$'+f2(cur):'<span class="shimmer" style="width:54px;height:14px">&nbsp;</span>';
+  var pnlHtml=pu!==null
+    ?'<span class="pos-pnl-usd" style="color:'+pcol(pu)+'">'+money(pu)+'</span><span class="pos-pnl-pct" style="color:'+pcol(pp||0)+'">'+ppct(pp||0)+'</span>'
+    :'<span class="shimmer" style="width:110px;height:17px">&nbsp;</span>';
+
+  // Expanded detail
+  var detailHtml='';
+  if(ie && cur && pd){
+    var a=buildAnalysis(pos,pd);
+    detailHtml=(
+      '<div class="detail-grid">'
+      +dcc('持倉市值',money(pv),'var(--text)')
+      +dcc('進場成本',money(pos.entry*pos.shares),'var(--muted)')
+      +dcc('損益',money(pu||0),pcol(pu||0))
+      +dcc('最大虧損',money(-a.ml),'var(--red)')
+      +dcc('距停損',f2(a.sg,1)+'%',a.sg<3?'var(--amber)':'var(--text)')
+      +dcc('持倉天數',a.days+'天','var(--text)')
+      +'</div>'
+      +'<div class="analysis-box">'
+      +'<div class="analysis-title">⚡ SEPA 分析</div>'
+      +'<div class="analysis-grid">'
+      +'<div class="analysis-item"><div class="analysis-item-label">訊號</div>'
+      +'<div class="analysis-item-val"><span class="sig-badge '+a.sigCls+'" style="margin-top:0;font-size:11px">'+a.sig+'</span></div></div>'
+      +'<div class="analysis-item"><div class="analysis-item-label">盈虧比</div>'
+      +'<div class="analysis-item-val" style="color:'+(a.rv>=2?'var(--green)':a.rv>=1?'var(--amber)':'var(--red)')+'">'+a.rrStr+'</div></div>'
+      +'<div class="analysis-item"><div class="analysis-item-label">今日高低</div>'
+      +'<div class="analysis-item-val" style="color:var(--muted);font-size:12px">$'+f2(pd.low)+' — $'+f2(pd.high)+'</div></div>'
+      +'<div class="analysis-item"><div class="analysis-item-label">日內位置</div>'
+      +'<div class="analysis-item-val" style="color:'+(a.rangePos>60?'var(--green)':a.rangePos<30?'var(--red)':'var(--amber)')+'">'+a.rangePos+'%</div></div>'
+      +'</div>'
+      // Day range bar
+      +'<div style="margin:8px 0 10px">'
+      +'<div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.07em">今日區間位置</div>'
+      +'<div style="position:relative;height:6px;background:var(--bg2);border-radius:6px;overflow:visible">'
+      +'<div style="position:absolute;left:0;top:0;height:6px;width:'+a.rangePos+'%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:6px;transition:width .5s"></div>'
+      +'<div style="position:absolute;top:-4px;left:'+a.rangePos+'%;transform:translateX(-50%);width:14px;height:14px;background:var(--green);border-radius:50%;border:2px solid var(--card)"></div>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;margin-top:6px;font-family:var(--mono);font-size:9px;color:var(--muted)">'
+      +'<span>低 $'+f2(pd.low)+'</span><span>現 $'+f2(cur)+'</span><span>高 $'+f2(pd.high)+'</span>'
+      +'</div></div>'
+      +'<div class="rationale">'+a.rationale+'</div>'
+      +'</div>'
+    );
+  } else if(ie && !cur){
+    detailHtml='<div style="padding:10px;font-family:var(--mono);font-size:12px;color:var(--muted)">⏳ 正在載入報價…點擊右上角「更新」</div>';
+  }
+
+  card.innerHTML=(
+    '<div class="pos-main" data-toggle="'+pos.id+'">'
+    +'<div><div class="pos-ticker">'+pos.ticker+'</div>'
+    +'<div class="pos-date">'+(pos.date||'')+'</div>'
+    +'<div class="sig-badge '+bkey+'">'+bicon+' '+blabel+'</div></div>'
+    +'<div class="pos-middle">'
+    +'<div class="pos-pnl-row">'+pnlHtml+'</div>'
+    +'<div class="pos-bar-track"><div class="pos-bar-fill" style="width:'+bw+'%;background:'+bc+'"></div></div>'
+    +'<div class="pos-meta">'
+    +'<div class="pos-meta-item">'+pos.shares+' 股</div>'
+    +'<div class="pos-meta-item">停損 <span style="color:var(--red)">$'+f2(pos.stop)+'</span></div>'
+    +'<div class="pos-meta-item" style="color:'+c1col+'">'+c1str+'</div>'
+    +'</div></div>'
+    +'<div class="pos-right">'
+    +'<div class="pos-current" style="color:'+c1col+'">'+curStr+'</div>'
+    +'<div class="pos-entry-small">進 $'+f2(pos.entry)+'</div>'
+    +'</div></div>'
+    +'<div class="pos-detail">'
+    +detailHtml
+    +(pos.notes?'<div class="pos-notes">📝 '+pos.notes+'</div>':'')
+    +'<div class="detail-actions">'
+    +'<button type="button" class="btn-sm" data-action="edit-stop" data-id="'+pos.id+'">修改停損</button>'
+    +'<button type="button" class="btn-sm" data-action="edit-notes" data-id="'+pos.id+'">修改備注</button>'
+    +'<button type="button" class="btn-sm danger" data-action="delete" data-id="'+pos.id+'">🗑 刪除</button>'
+    +'</div></div>'
+  );
+}
+
+function dcc(l,v,c){ return '<div class="dc"><div class="dc-lbl">'+l+'</div><div class="dc-val" style="color:'+c+'">'+v+'</div></div>'; }
+
+function save(){ store.set('sepa_positions',positions); }
+
+// ── Full refresh ──────────────────────────────────────────────────────
+function fullRefresh(){
+  if(loading) return;
+  loading=true;
+  var ic=document.getElementById('ri'), lb=document.getElementById('rl');
+  ic.className='spinning'; lb.textContent='更新中';
+  fetchAll(function(){
+    loading=false;
+    ic.className=''; lb.textContent='更新';
+    renderAll();
+  });
+}
+
+// ── Add position ──────────────────────────────────────────────────────
+function addPos(){
+  var ticker=(document.getElementById('f-ticker').value||'').toUpperCase().trim();
+  var entry=pn('f-entry'), shares=pn('f-shares'), stop=pn('f-stop');
+  var date=document.getElementById('f-date').value, notes=(document.getElementById('f-notes').value||'').trim();
+  if(!ticker){ toast('⚠️ 請輸入股票代號'); return; }
+  if(!entry){ toast('⚠️ 請輸入進場價'); return; }
+  if(!shares){ toast('⚠️ 請輸入股數'); return; }
+  if(!stop){ toast('⚠️ 請輸入停損價'); return; }
+  if(stop>=entry){ toast('⚠️ 停損價必須低於進場價'); return; }
+  var pos={id:uid(),ticker:ticker,entry:entry,shares:shares,stop:stop,date:date||new Date().toISOString().slice(0,10),notes:notes};
+  positions.unshift(pos); save();
+  ['f-ticker','f-entry','f-shares','f-stop','f-notes'].forEach(function(id){ document.getElementById(id).value=''; });
+  renderAll();
+  toast('✅ '+ticker+' 已加入，抓取報價中…');
+  fetchOne(ticker).then(function(d){ prices[ticker]=d; renderAll(); }).catch(function(){ toast('⚠️ '+ticker+' 報價暫時無法取得'); });
+}
+
+// ── Events ────────────────────────────────────────────────────────────
+document.getElementById('pos-wrap').addEventListener('click', function(e){
+  var el=e.target, tg=el.closest('[data-toggle]');
+  if(tg){ var tid=tg.getAttribute('data-toggle'); expanded=expanded===tid?null:tid; renderPositions(); return; }
+  var btn=el.closest('[data-action]'); if(!btn) return;
+  var action=btn.getAttribute('data-action'), id=btn.getAttribute('data-id');
+  var pos=positions.find(function(p){ return p.id===id; }); if(!pos) return;
+  if(action==='delete'){
+    positions=positions.filter(function(p){ return p.id!==id; });
+    if(expanded===id) expanded=null; save(); renderAll(); toast('🗑 '+pos.ticker+' 已刪除');
+  }
+  if(action==='edit-stop'){
+    var ns=prompt('新停損價 (現在: $'+f2(pos.stop)+')', f2(pos.stop)); if(ns===null) return;
+    var nv=parseFloat(ns.replace(/[^\d.]/g,''));
+    if(!nv||nv<=0){ toast('⚠️ 無效停損價'); return; }
+    if(nv>=pos.entry){ toast('⚠️ 停損必須低於進場價'); return; }
+    pos.stop=nv; save(); renderAll(); toast('✅ 停損更新為 $'+f2(nv));
+  }
+  if(action==='edit-notes'){
+    var nn=prompt('備注:', pos.notes||''); if(nn===null) return;
+    pos.notes=nn.trim(); save(); renderAll(); toast('✅ 備注已更新');
+  }
+});
+
+document.getElementById('btn-add').addEventListener('click', addPos);
+document.getElementById('btn-refresh').addEventListener('click', fullRefresh);
+
+// Export modal
+document.getElementById('btn-export').addEventListener('click', function(){
+  document.getElementById('modal-json').textContent=JSON.stringify(positions,null,2);
+  document.getElementById('modal').classList.add('show');
+});
+document.getElementById('btn-mclose').addEventListener('click', function(){ document.getElementById('modal').classList.remove('show'); });
+document.getElementById('modal').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+document.getElementById('btn-copy').addEventListener('click', function(){
+  var json=document.getElementById('modal-json').textContent;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(json).then(function(){ toast('✅ 已複製到剪貼板！'); });
+  } else {
+    var ta=document.createElement('textarea'); ta.value=json; ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try{ document.execCommand('copy'); toast('✅ 已複製！'); }catch(e){ toast('⚠️ 請手動長按複製'); }
+    document.body.removeChild(ta);
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────
+document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+if(positions.length){ renderAll(); fullRefresh(); }
+else{ renderAll(); }
+
+// Auto-refresh every 5 min during market hours
+setInterval(function(){
+  var dot=document.getElementById('mkt-dot');
+  if(dot.classList.contains('open')||dot.classList.contains('pre')) fullRefresh();
+}, 5*60*1000);
+
+}());
+</script>
+</body>
+</html>
