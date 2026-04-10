@@ -672,26 +672,48 @@ function analyseVCP(ohlcv){
     buyLow:rHi,buyHigh:rHi*1.02,rHi:rHi};
 }
 
+function parseYahooOHLCV(data){
+  var res=data&&data.chart&&data.chart.result&&data.chart.result[0];
+  if(!res) throw new Error('no data');
+  var ts=res.timestamp||[],q=res.indicators.quote[0],ohlcv=[];
+  for(var i=0;i<ts.length;i++){
+    if(q.close[i]==null) continue;
+    ohlcv.push({t:ts[i],o:q.open[i],h:q.high[i],l:q.low[i],c:q.close[i],v:q.volume[i]||0});
+  }
+  if(ohlcv.length<10) throw new Error('insufficient');
+  return ohlcv;
+}
+
 function fetchOHLCV(ticker){
-  // 改用 Finnhub candles API（無 CORS 問題），取過去 6 個月日線
-  var to=Math.floor(Date.now()/1000);
-  var from=to-180*24*3600; // 約 6 個月
-  var url='https://finnhub.io/api/v1/stock/candle?symbol='
-    +encodeURIComponent(ticker)
-    +'&resolution=D&from='+from+'&to='+to
-    +'&token='+cfg.apiKey;
-  return fetch(url,{cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(!data||data.s==='no_data'||!data.t||!data.t.length) throw new Error('no data');
-      var ohlcv=[];
-      for(var i=0;i<data.t.length;i++){
-        if(data.c[i]==null) continue;
-        ohlcv.push({t:data.t[i],o:data.o[i],h:data.h[i],l:data.l[i],c:data.c[i],v:data.v[i]||0});
-      }
-      if(ohlcv.length<10) throw new Error('insufficient data');
-      return ohlcv;
-    });
+  var yahooUrl='https://query1.finance.yahoo.com/v8/finance/chart/'
+    +encodeURIComponent(ticker)+'?interval=1d&range=6mo&events=none';
+
+  // Proxy 列表，依序嘗試
+  var proxies=[
+    function(){
+      var u='https://api.allorigins.win/get?url='+encodeURIComponent(yahooUrl);
+      return fetch(u,{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(w){return parseYahooOHLCV(JSON.parse(w.contents));});
+    },
+    function(){
+      var u='https://corsproxy.io/?'+encodeURIComponent(yahooUrl);
+      return fetch(u,{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(d){return parseYahooOHLCV(d);});
+    },
+    function(){
+      var u='https://thingproxy.freeboard.io/fetch/'+yahooUrl;
+      return fetch(u,{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(d){return parseYahooOHLCV(d);});
+    }
+  ];
+
+  // 依序嘗試，成功即返回
+  return proxies.reduce(function(chain, tryProxy){
+    return chain.catch(function(){ return tryProxy(); });
+  }, Promise.reject(new Error('start')));
 }
 
 function fetchVCPAll(cb){
