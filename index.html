@@ -312,6 +312,37 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
   z-index:999;transition:transform .3s cubic-bezier(.4,0,.2,1);
   pointer-events:none;white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,.5)}
 .toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── TAKE PROFIT PANEL ──────────────────────────── */
+.tp-plan{background:rgba(0,204,102,.04);border:1px solid rgba(0,204,102,.15);
+  border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.tp-plan-title{font-family:var(--mono);font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:10px}
+.tp-rows{display:flex;flex-direction:column;gap:0}
+.tp-row{display:grid;grid-template-columns:32px 1fr 72px 64px 42px;
+  align-items:center;gap:6px;padding:7px 10px;
+  border-radius:6px;margin-bottom:2px;background:var(--card);
+  border:1px solid var(--bdr)}
+.tp-row.t1{border-left:3px solid var(--amber)}
+.tp-row.t2{border-left:3px solid var(--grn2)}
+.tp-row.t3{border-left:3px solid var(--green)}
+.tp-row.t4{border-left:3px solid var(--purp)}
+.tp-num{font-family:var(--mono);font-size:11px;font-weight:700;text-align:center}
+.tp-lbl{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.tp-lbl strong{display:block;font-size:12px;margin-bottom:1px}
+.tp-price{font-family:var(--mono);font-size:11px;color:var(--text);text-align:right}
+.tp-pnl{font-family:var(--mono);font-size:11px;font-weight:700;text-align:right;color:var(--green)}
+.tp-rr{font-family:var(--mono);font-size:11px;font-weight:700;text-align:right}
+.tp-sub{font-size:9px;color:#464870;padding:2px 10px 6px;border-left:2px solid var(--bdr);
+  margin-left:4px;margin-bottom:2px;font-family:var(--mono)}
+.tp-stopmove{background:var(--bg2);border-radius:7px;padding:8px 11px;
+  font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9;margin-top:6px}
+.tp-stopmove strong{font-weight:700}
+.tp-next{background:rgba(255,176,32,.07);border:1px solid rgba(255,176,32,.2);
+  border-radius:6px;padding:6px 10px;font-family:var(--mono);font-size:10px;
+  color:var(--amber);margin-top:6px;display:flex;align-items:center;gap:6px}
+.tp-row.tp-hit{opacity:.4;text-decoration:line-through}
+.tp-row.tp-active{border-color:var(--amber)!important;background:rgba(255,176,32,.05)!important}
 </style>
 </head>
 <body>
@@ -781,6 +812,60 @@ function buildAnalysis(g, pd){
   return {sig:sig,sigCls:sigCls,rationale:rationale,rv:rv,ml:ml,days:days,sg:sg,pp:pp,rangePos:rangePos};
 }
 
+
+// ── Build Take Profit Plan ────────────────────────
+function buildTPPlan(g, cur){
+  var entry=g.avgEntry, stop=g.avgStop, shares=g.totalShares;
+  var maxLoss=Math.round((entry-stop)*shares);
+  if(maxLoss<=0) return '';
+  var pp=cur?(cur-entry)/entry*100:0;
+  var tiers=[
+    {num:'T1',pct:.20,sh:Math.ceil(shares/3), label:'第一止盈',col:'var(--amber)',cls:'t1',action:'出 ⅓，停損移至成本+2%'},
+    {num:'T2',pct:.40,sh:Math.ceil(shares/3), label:'中段獲利',col:'var(--grn2)', cls:'t2',action:'再出 ⅓，停損移至+20%'},
+    {num:'T3',pct:.60,sh:Math.floor(shares/3),label:'主力目標',col:'var(--green)',cls:'t3',action:'剩餘出場或跟進停損'},
+    {num:'T4',pct:1.00,sh:shares,             label:'超級績效',col:'var(--purp)', cls:'t4',action:'強勢特例，緊跟支撐'},
+  ];
+  var html='<div class="tp-plan"><div class="tp-plan-title">🎯 止盈計劃</div><div class="tp-rows">';
+  var nextTier=null;
+  tiers.forEach(function(t){
+    var tgt=Math.round(entry*(1+t.pct)*100)/100;
+    var profit=Math.round(t.sh*(tgt-entry));
+    var rr=maxLoss>0?(profit/maxLoss).toFixed(1):'—';
+    var rrNum=parseFloat(rr);
+    var rrCol=rrNum>=3?'var(--green)':rrNum>=2?'var(--grn2)':rrNum>=1?'var(--amber)':'var(--red)';
+    var reached=cur&&cur>=tgt;
+    var isActive=cur&&pp>=(t.pct-.08)*100&&pp<(t.pct+.15)*100;
+    if(!nextTier&&cur&&!reached) nextTier={label:t.num,price:tgt,dist:tgt-cur,distPct:((tgt-cur)/cur*100).toFixed(1)};
+    var rowCls='tp-row '+t.cls+(reached?' tp-hit':'')+(isActive?' tp-active':'');
+    html+='<div class="'+rowCls+'">'
+      +'<div class="tp-num" style="color:'+t.col+'">'+t.num+'</div>'
+      +'<div class="tp-lbl"><strong style="color:'+t.col+'">+' +(t.pct*100).toFixed(0)+'%</strong>'+t.label+'</div>'
+      +'<div class="tp-price">$'+tgt.toFixed(2)+'</div>'
+      +'<div class="tp-pnl">+$'+profit.toLocaleString()+'</div>'
+      +'<div class="tp-rr" style="color:'+rrCol+'">'+rr+':1</div>'
+      +'</div>'
+      +'<div class="tp-sub">↳ '+t.action+'</div>';
+  });
+  html+='</div>';
+  if(nextTier){
+    html+='<div class="tp-next">📍 距 '+nextTier.label+' <strong>$'+nextTier.price.toFixed(2)+'</strong>'
+      +' 還差 <strong>$'+nextTier.dist.toFixed(2)+' (+'+nextTier.distPct+'%)</strong></div>';
+  } else if(cur) {
+    html+='<div class="tp-next">🏆 已超越 T3，停損緊跟支撐，讓利潤繼續跑</div>';
+  }
+  var s1=Math.round(entry*1.02*100)/100;
+  var s2=Math.round(entry*1.20*100)/100;
+  var s3=Math.round(entry*1.40*100)/100;
+  html+='<div class="tp-stopmove">'
+    +'<strong style="color:var(--blue)">📌 停損移動：</strong>'
+    +' 進場 <strong style="color:var(--red)">$'+f2(stop,2)+'</strong>'
+    +' &rarr; T1後 <strong style="color:var(--amber)">$'+s1.toFixed(2)+'</strong>'
+    +' &rarr; T2後 <strong style="color:var(--grn2)">$'+s2.toFixed(2)+'</strong>'
+    +' &rarr; T3後 <strong style="color:var(--green)">$'+s3.toFixed(2)+'</strong>'
+    +'</div></div>';
+  return html;
+}
+
 // ── Render ────────────────────────────────────────
 function renderAll(){ renderStats(); renderPositions(); }
 
@@ -866,7 +951,7 @@ function renderCard(card, g){
 
     if(cur && pd){
       var a=buildAnalysis(g,pd);
-      detailHtml=buildVcpPanel(g.ticker)+lotsHtml
+      detailHtml=buildVcpPanel(g.ticker)+buildTPPlan(g,cur)+lotsHtml
         +'<div class="detail-grid">'
         +dcc('合計市值',money(pv),'var(--text)')+dcc('加權成本',money(g.totalCost),'var(--muted)')
         +dcc('總損益',money(pu||0),pcol(pu||0))
@@ -897,7 +982,7 @@ function renderCard(card, g){
         +'<div class="rationale">'+a.rationale+'</div>'
         +'</div>';
     } else {
-      detailHtml=buildVcpPanel(g.ticker)+lotsHtml+'<div style="padding:10px;font-family:var(--mono);font-size:12px;color:var(--muted)">⏳ 點右上角「更新」載入報價</div>';
+      detailHtml=buildVcpPanel(g.ticker)+buildTPPlan(g,null)+lotsHtml+'<div style="padding:10px;font-family:var(--mono);font-size:12px;color:var(--muted)">⏳ 點右上角「更新」載入報價</div>';
     }
     if(g.notes) detailHtml+='<div class="pos-notes">📝 '+g.notes+'</div>';
     detailHtml+='<div class="detail-actions"><button type="button" class="btn-sm danger" data-action="delete-all" data-ticker="'+g.ticker+'">🗑 清除 '+g.ticker+' 所有部位</button></div>';
