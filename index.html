@@ -694,31 +694,67 @@ function analyseVCP(ohlcv){
     buyLow:rHi,buyHigh:rHi*1.02,rHi:rHi};
 }
 
+function parseYahooOHLCV(raw){
+  var res=raw&&raw.chart&&raw.chart.result&&raw.chart.result[0];
+  if(!res) throw new Error('no result');
+  var ts=res.timestamp||[];
+  var q=res.indicators&&res.indicators.quote&&res.indicators.quote[0];
+  if(!q||!ts.length) throw new Error('no quotes');
+  var ohlcv=[];
+  for(var i=0;i<ts.length;i++){
+    if(q.close[i]==null) continue;
+    ohlcv.push({t:ts[i],o:q.open[i]||q.close[i],h:q.high[i]||q.close[i],
+      l:q.low[i]||q.close[i],c:q.close[i],v:q.volume[i]||0});
+  }
+  if(ohlcv.length<10) throw new Error('insufficient');
+  return ohlcv;
+}
+
+function fetchWithTimeout(url, ms){
+  return new Promise(function(resolve,reject){
+    var done=false;
+    var t=setTimeout(function(){if(!done){done=true;reject(new Error('timeout'));}},ms);
+    fetch(url,{cache:'no-store'})
+      .then(function(r){if(!done){done=true;clearTimeout(t);resolve(r);}})
+      .catch(function(e){if(!done){done=true;clearTimeout(t);reject(e);}});
+  });
+}
+
 function fetchOHLCV(ticker){
-  // Yahoo Finance v8 via allorigins CORS proxy — 免費無需 API Key
   var to=Math.floor(Date.now()/1000);
-  var from=to-220*24*3600; // 約 7 個月
-  var yahooUrl='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)
-    +'?interval=1d&period1='+from+'&period2='+to+'&includePrePost=false';
-  var proxyUrl='https://api.allorigins.win/get?url='+encodeURIComponent(yahooUrl);
-  return fetch(proxyUrl,{cache:'no-store'})
-    .then(function(r){ if(!r.ok) throw new Error('proxy'); return r.json(); })
-    .then(function(proxy){
-      var raw=JSON.parse(proxy.contents);
-      var res=raw&&raw.chart&&raw.chart.result&&raw.chart.result[0];
-      if(!res) throw new Error('no data');
-      var ts=res.timestamp||[];
-      var q=res.indicators&&res.indicators.quote&&res.indicators.quote[0];
-      if(!q||!ts.length) throw new Error('no quotes');
-      var ohlcv=[];
-      for(var i=0;i<ts.length;i++){
-        if(q.close[i]==null) continue;
-        ohlcv.push({t:ts[i],o:q.open[i]||q.close[i],h:q.high[i]||q.close[i],
-          l:q.low[i]||q.close[i],c:q.close[i],v:q.volume[i]||0});
-      }
-      if(ohlcv.length<10) throw new Error('insufficient');
-      return ohlcv;
+  var from=to-220*24*3600;
+  var sym=encodeURIComponent(ticker);
+  var qs='?interval=1d&period1='+from+'&period2='+to+'&includePrePost=false';
+
+  // 嘗試順序：query2（較寬鬆CORS）→ query1 → allorigins proxy
+  var attempts=[
+    function(){
+      return fetchWithTimeout('https://query2.finance.yahoo.com/v8/finance/chart/'+sym+qs,7000)
+        .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
+        .then(function(d){return parseYahooOHLCV(d);});
+    },
+    function(){
+      return fetchWithTimeout('https://query1.finance.yahoo.com/v8/finance/chart/'+sym+qs,7000)
+        .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
+        .then(function(d){return parseYahooOHLCV(d);});
+    },
+    function(){
+      var u='https://query1.finance.yahoo.com/v8/finance/chart/'+sym+qs;
+      return fetchWithTimeout('https://api.allorigins.win/get?url='+encodeURIComponent(u),9000)
+        .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
+        .then(function(d){var raw=d.contents?JSON.parse(d.contents):d;return parseYahooOHLCV(raw);});
+    }
+  ];
+
+  function tryNext(idx){
+    if(idx>=attempts.length) return Promise.reject(new Error('all failed'));
+    return attempts[idx]().catch(function(e){
+      console.warn('VCP attempt '+idx+' failed:',e.message);
+      return tryNext(idx+1);
     });
+  }
+
+  return tryNext(0);
 }
 
 function fetchVCPAll(cb){
