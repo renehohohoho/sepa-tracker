@@ -695,23 +695,28 @@ function analyseVCP(ohlcv){
 }
 
 function fetchOHLCV(ticker){
-  // 改用 Finnhub candles API（無 CORS 問題），取過去 6 個月日線
+  // Yahoo Finance v8 via allorigins CORS proxy — 免費無需 API Key
   var to=Math.floor(Date.now()/1000);
-  var from=to-180*24*3600; // 約 6 個月
-  var url='https://finnhub.io/api/v1/stock/candle?symbol='
-    +encodeURIComponent(ticker)
-    +'&resolution=D&from='+from+'&to='+to
-    +'&token='+cfg.apiKey;
-  return fetch(url,{cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(!data||data.s==='no_data'||!data.t||!data.t.length) throw new Error('no data');
+  var from=to-220*24*3600; // 約 7 個月
+  var yahooUrl='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)
+    +'?interval=1d&period1='+from+'&period2='+to+'&includePrePost=false';
+  var proxyUrl='https://api.allorigins.win/get?url='+encodeURIComponent(yahooUrl);
+  return fetch(proxyUrl,{cache:'no-store'})
+    .then(function(r){ if(!r.ok) throw new Error('proxy'); return r.json(); })
+    .then(function(proxy){
+      var raw=JSON.parse(proxy.contents);
+      var res=raw&&raw.chart&&raw.chart.result&&raw.chart.result[0];
+      if(!res) throw new Error('no data');
+      var ts=res.timestamp||[];
+      var q=res.indicators&&res.indicators.quote&&res.indicators.quote[0];
+      if(!q||!ts.length) throw new Error('no quotes');
       var ohlcv=[];
-      for(var i=0;i<data.t.length;i++){
-        if(data.c[i]==null) continue;
-        ohlcv.push({t:data.t[i],o:data.o[i],h:data.h[i],l:data.l[i],c:data.c[i],v:data.v[i]||0});
+      for(var i=0;i<ts.length;i++){
+        if(q.close[i]==null) continue;
+        ohlcv.push({t:ts[i],o:q.open[i]||q.close[i],h:q.high[i]||q.close[i],
+          l:q.low[i]||q.close[i],c:q.close[i],v:q.volume[i]||0});
       }
-      if(ohlcv.length<10) throw new Error('insufficient data');
+      if(ohlcv.length<10) throw new Error('insufficient');
       return ohlcv;
     });
 }
