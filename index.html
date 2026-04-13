@@ -527,6 +527,20 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
   </button>
 </nav>
 
+<!-- TP CONFIRM MODAL -->
+<div class="modal-overlay" id="tp-modal">
+  <div class="modal">
+    <div>
+      <div class="modal-title" id="tp-modal-title">確認執行</div>
+      <div class="modal-sub" id="tp-modal-body"></div>
+    </div>
+    <div class="modal-btns">
+      <button type="button" id="tp-modal-confirm" style="background:var(--amber);color:#000;border:none;border-radius:10px;padding:13px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;flex:1;min-height:48px;">✅ 確認執行</button>
+      <button type="button" id="tp-modal-cancel" class="btn-mclose">取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- EXPORT MODAL -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
@@ -1123,24 +1137,46 @@ function dcc(l,v,c){ return '<div class="dc"><div class="dc-lbl">'+l+'</div><div
 function saveLots(){ store.set('sepa_positions', lots); }
 function saveTpPhase(){ store.set('sepa_tp_phase', tpPhase); }
 
+// ── TP Confirm Modal ──────────────────────────────
+function tpConfirm(title, body, onConfirm){
+  var overlay=document.getElementById('tp-modal');
+  var titleEl=document.getElementById('tp-modal-title');
+  var bodyEl=document.getElementById('tp-modal-body');
+  var confirmBtn=document.getElementById('tp-modal-confirm');
+  var cancelBtn=document.getElementById('tp-modal-cancel');
+  titleEl.textContent=title;
+  bodyEl.innerHTML=body;
+  overlay.classList.add('show');
+  function close(){ overlay.classList.remove('show'); confirmBtn.removeEventListener('click',doConfirm); cancelBtn.removeEventListener('click',doCancel); overlay.removeEventListener('click',doBg); }
+  function doConfirm(){ close(); onConfirm(); }
+  function doCancel(){ close(); }
+  function doBg(e){ if(e.target===overlay) close(); }
+  confirmBtn.addEventListener('click',doConfirm);
+  cancelBtn.addEventListener('click',doCancel);
+  overlay.addEventListener('click',doBg);
+}
+
 // ── Execute T1 / T2 / T3 ─────────────────────────
 function executeTpAction(ticker, phase){
   var group=getGroups().find(function(g){return g.ticker===ticker;});
   if(!group) return;
   var entry=group.avgEntry;
-  var confirmMsg;
+  var modalTitle, modalBody;
   if(phase===1){
     var sh=Math.ceil(group.totalShares/3);
     var newStop=Math.round(entry*1.02*100)/100;
-    confirmMsg='T1 執行：\n出售約 ⅓（'+sh+' 股）\n停損移至成本+2%（$'+newStop.toFixed(2)+'）\n\n確認執行？';
+    modalTitle='🟡 T1 出 ⅓';
+    modalBody='出售約 <strong>'+sh+' 股</strong>（⅓）<br>停損移至成本+2%：<strong style="color:var(--amber)">$'+newStop.toFixed(2)+'</strong>';
   } else if(phase===2){
     var sh=Math.ceil(group.totalShares/3);
     var newStop=Math.round(entry*1.20*100)/100;
-    confirmMsg='T2 執行：\n再出售約 ⅓（'+sh+' 股）\n停損移至+20%（$'+newStop.toFixed(2)+'）\n\n確認執行？';
+    modalTitle='🟢 T2 再出 ⅓';
+    modalBody='再出售約 <strong>'+sh+' 股</strong>（⅓）<br>停損移至+20%：<strong style="color:var(--grn2)">$'+newStop.toFixed(2)+'</strong>';
   } else if(phase===3){
-    confirmMsg='T3 執行：\n出清剩餘全部 '+group.totalShares+' 股\n清除所有 '+ticker+' 持倉\n\n確認執行？';
+    modalTitle='✅ T3 清倉';
+    modalBody='出清剩餘全部 <strong>'+group.totalShares+' 股</strong><br>清除所有 <strong>'+ticker+'</strong> 持倉';
   }
-  if(!confirm(confirmMsg)) return;
+  tpConfirm(modalTitle, modalBody, function(){
 
   if(phase===1){
     // Remove lots to reduce ~⅓ of shares; update all stops to entry*1.02
@@ -1195,7 +1231,8 @@ function executeTpAction(ticker, phase){
     var phaseStop=phase===1?Math.round(group.avgEntry*1.02*100)/100:Math.round(group.avgEntry*1.20*100)/100;
     toast('✅ '+ticker+' T'+phase+' 完成 · 停損已移至 $'+phaseStop.toFixed(2));
   }
-}
+  }); // end tpConfirm callback
+} // end executeTpAction
 
 // ── Full refresh ──────────────────────────────────
 function fullRefresh(){
