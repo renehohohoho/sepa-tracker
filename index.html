@@ -971,12 +971,12 @@ function buildTPPlan(g, cur){
   actions.forEach(function(a){
     var isDone=phase>=a.phase;
     var isNext=phase===a.phase-1;
-    var isFuture=phase<a.phase-1;
-    var btnCls='tp-act-btn '+(isDone?'done-btn':(isNext?a.cls+' next-btn':(isFuture?'future-btn':a.cls)));
-    var icon=isDone?'✅':(isNext?'👉':'⬜');
+    // All non-done buttons are always clickable (user may skip or re-execute)
+    var btnCls='tp-act-btn '+(isDone?'done-btn':(isNext?a.cls+' next-btn':a.cls));
+    var icon=isDone?'✅':(isNext?'👉':'○');
     html+='<button type="button" class="'+btnCls+'"'
-      +(isDone||isFuture?'':' data-tp-action="'+a.phase+'" data-ticker="'+g.ticker+'"')
-      +(isFuture?' disabled':'')+' style="'+(isNext?'flex:2;':'flex:1;')+'">'
+      +(isDone?'':' data-tp-action="'+a.phase+'" data-ticker="'+g.ticker+'"')
+      +' style="'+(isNext?'flex:2;':'flex:1;')+'">'
       +'<span class="tp-act-badge">'+icon+'</span>'
       +'<span style="font-size:'+(isNext?'12':'11')+'px;font-weight:'+(isNext?'700':'400')+'">'+a.label+'</span>'
       +'<span class="tp-act-lbl">'+a.sub.replace(/\n/g,'<br>')+'</span>'
