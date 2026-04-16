@@ -1025,10 +1025,13 @@ function buildTPPlan(g, cur){
 
   // ── Quick-action buttons ──────────────────────────
   var phase=tpPhase[g.ticker]||0; // 0=未執行 1=T1完成 2=T2完成 3=T3完成
-  var t1sh=Math.ceil(shares/3), t2sh=Math.ceil(shares/3), t3sh=g.totalShares;
+  // Default shares for each button depend on phase & remaining shares
+  var t1sh=Math.ceil(shares/3);
+  var t2sh= phase>=1 ? Math.ceil(shares/2) : Math.ceil(shares/3); // after T1: half of remaining
+  var t3sh= shares; // always all remaining
   var actions=[
     {label:'T1 出 ⅓',sub:'出 '+t1sh+' 股\n停損→成本+2%',cls:'t1-btn',phase:1},
-    {label:'T2 再出 ⅓',sub:'再出 '+t2sh+' 股\n停損→+20%',cls:'t2-btn',phase:2},
+    {label:'T2 再出 ½',sub:'再出 '+t2sh+' 股\n停損→+20%',cls:'t2-btn',phase:2},
     {label:'T3 清倉',sub:'出清剩餘 '+t3sh+' 股\n完成交易',cls:'t3-btn',phase:3},
   ];
   html+='<div class="tp-actions">';
@@ -1241,13 +1244,17 @@ function openTpModal(ticker, phase){
 
   var entry=group.avgEntry;
   var totalSh=group.totalShares;
+  var curPhase=tpPhase[ticker]||0;
   var curPrice=(prices[ticker]&&prices[ticker].price)||null;
-  var defaultShares=Math.ceil(totalSh/3);
+  // Default shares: T1=⅓, T2=½ of remaining (after T1), T3=all remaining
+  var defaultShares= phase===1 ? Math.ceil(totalSh/3)
+                   : phase===2 ? Math.ceil(totalSh/2)
+                   : totalSh;
   var newStopPrice= phase===1 ? Math.round(entry*1.02*100)/100
                   : phase===2 ? Math.round(entry*1.20*100)/100
                   : Math.round(entry*1.40*100)/100;
   var phaseCol= phase===1?'var(--amber)': phase===2?'var(--grn2)':'var(--green)';
-  var phaseLabel= phase===1?'T1 出 ⅓': phase===2?'T2 再出 ⅓':'T3 清倉';
+  var phaseLabel= phase===1?'T1 出 ⅓': phase===2?'T2 再出 ½':'T3 清倉';
 
   // Store context on modal for confirm handler
   var overlay=document.getElementById('tp-modal');
