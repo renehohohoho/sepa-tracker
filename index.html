@@ -2,11 +2,14 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SEPA 持倉">
-<title>SEPA 持倉管理</title>
+<title>SEPA 持倉管理 v4.1</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -367,6 +370,20 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 .tp-progress-dot.tp-done{background:var(--green)}
 .tp-progress-dot.tp-pending{background:var(--dim);border:1px solid var(--bdr2)}
 </style>
+<!-- Cache buster: forces iOS Safari to reload from network, not disk cache -->
+<script>
+(function(){
+  var VER='4.1';
+  var stored=sessionStorage.getItem('sepa_ver');
+  if(stored!==VER){
+    sessionStorage.setItem('sepa_ver',VER);
+    // If this is a stale cached page, reload once from network
+    if(stored!==null){
+      window.location.reload(true);
+    }
+  }
+})();
+</script>
 </head>
 <body>
 
@@ -379,6 +396,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
     </div>
     <div class="hdr-btns">
       <button type="button" class="btn-icon" id="btn-export">📋</button>
+      <button type="button" class="btn-icon" id="btn-hardreload" title="強制重載最新版本" style="font-size:13px">🔄 重載</button>
       <button type="button" class="btn-icon" id="btn-refresh"><span id="ri">↻</span> <span id="rl">更新</span></button>
     </div>
   </div>
@@ -1062,7 +1080,7 @@ function renderStats(){
   document.getElementById('s-val').textContent=n?money(tv):'—';
   document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
   document.getElementById('s-loss').textContent=n?money(-ml):'—';
-  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票';
+  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v4.1';
 }
 
 function renderPositions(){
@@ -1501,6 +1519,14 @@ document.getElementById('pos-wrap').addEventListener('click', function(e){
 
 document.getElementById('btn-add').addEventListener('click', addLot);
 document.getElementById('btn-refresh').addEventListener('click', fullRefresh);
+
+// Hard reload: bypass all caches, force fetch from network
+document.getElementById('btn-hardreload').addEventListener('click', function(){
+  sessionStorage.removeItem('sepa_ver');
+  // Add timestamp query param to force bypass CDN/browser cache
+  var url=window.location.href.split('?')[0]+'?v='+Date.now();
+  window.location.replace(url);
+});
 
 document.getElementById('tab-price').addEventListener('click', function(){ setStopMode('price'); });
 document.getElementById('tab-pct').addEventListener('click', function(){ setStopMode('pct'); });
