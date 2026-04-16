@@ -975,8 +975,8 @@ function buildAnalysis(g, pd){
 // ── Build Take Profit Plan ────────────────────────
 function buildTPPlan(g, cur){
   var entry=g.avgEntry, stop=g.avgStop, shares=g.totalShares;
-  var maxLoss=Math.round((entry-stop)*shares);
-  if(maxLoss<=0) return '';
+  var maxLoss=Math.abs(Math.round((entry-stop)*shares)); // stop may be above entry after T1 move
+  if(shares<=0) return '';
   var pp=cur?(cur-entry)/entry*100:0;
   var tiers=[
     {num:'T1',pct:.20,sh:Math.ceil(shares/3), label:'第一止盈',col:'var(--amber)',cls:'t1',action:'出 ⅓，停損移至成本+2%'},
