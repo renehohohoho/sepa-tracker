@@ -1237,30 +1237,36 @@ function saveTpPhase(){ store.set('sepa_tp_phase', tpPhase); }
 // ── TP Execute Modal ──────────────────────────────
 function openTpModal(ticker, phase){
   var group=getGroups().find(function(g){return g.ticker===ticker;});
-  if(!group) return;
+  if(!group){ toast('⚠️ 找不到持倉'); return; }
 
   var entry=group.avgEntry;
   var totalSh=group.totalShares;
   var curPrice=(prices[ticker]&&prices[ticker].price)||null;
   var defaultShares=Math.ceil(totalSh/3);
-  var defaultPrice=curPrice?curPrice.toFixed(2):entry.toFixed(2);
   var newStopPrice= phase===1 ? Math.round(entry*1.02*100)/100
                   : phase===2 ? Math.round(entry*1.20*100)/100
                   : Math.round(entry*1.40*100)/100;
-
-  // Phase colours
   var phaseCol= phase===1?'var(--amber)': phase===2?'var(--grn2)':'var(--green)';
   var phaseLabel= phase===1?'T1 出 ⅓': phase===2?'T2 再出 ⅓':'T3 清倉';
 
-  // Populate modal
+  // Store context on modal for confirm handler
+  var overlay=document.getElementById('tp-modal');
+  overlay.dataset.ticker=ticker;
+  overlay.dataset.phase=phase;
+  overlay.dataset.entry=entry;
+  overlay.dataset.totalSh=totalSh;
+  overlay.dataset.curPrice=curPrice||'';
+  overlay.dataset.newStop=newStopPrice;
+  overlay.dataset.defaultShares=defaultShares;
+
+  // Fill UI
   document.getElementById('tp-modal-title').textContent= phase===3?'T3 清倉確認':'執行止盈 '+phaseLabel;
   document.getElementById('tp-modal-phase-badge').textContent=phaseLabel;
-  document.getElementById('tp-modal-phase-badge').style.background='rgba(255,176,32,.15)';
   document.getElementById('tp-modal-phase-badge').style.color=phaseCol;
   document.getElementById('tp-modal-confirm').style.background=phaseCol;
 
   document.getElementById('tp-modal-info').innerHTML=
-    '<span style="color:var(--text)">'+(ticker)+'</span>'
+    '<span style="color:var(--text)">'+ticker+'</span>'
     +' &nbsp;·&nbsp; 現持 <strong style="color:var(--text)">'+totalSh+' 股</strong>'
     +' &nbsp;·&nbsp; 均價 <strong style="color:var(--text)">$'+f2(entry,2)+'</strong>'
     +(curPrice?' &nbsp;·&nbsp; 現價 <strong style="color:var(--green)">$'+f2(curPrice,2)+'</strong>':'');
@@ -1268,75 +1274,70 @@ function openTpModal(ticker, phase){
   document.getElementById('tp-modal-newstop').style.display='block';
   document.getElementById('tp-modal-newstop').innerHTML=
     '📌 執行後停損移至：<strong style="color:'+phaseCol+'">$'+f2(newStopPrice,2)+'</strong>'
-    +(phase===3?' &nbsp;·&nbsp; 清除全部持倉':'');
+    +(phase===3?' （清除全部持倉）':'');
 
-  // Set input defaults
   var sharesInp=document.getElementById('tp-inp-shares');
   var priceInp=document.getElementById('tp-inp-price');
   sharesInp.value=defaultShares;
-  priceInp.value=defaultPrice;
-  sharesInp.max=totalSh;
+  priceInp.value=curPrice?f2(curPrice,2):f2(entry,2);
 
-  // Live preview updater
   function updatePreview(){
     var sh=parseInt(sharesInp.value)||0;
     var pr=parseFloat(priceInp.value)||0;
     var preview=document.getElementById('tp-modal-preview');
     if(sh>0&&pr>0){
-      var realizedPnl=Math.round(sh*(pr-entry)*100)/100;
-      var remaining=totalSh-sh;
+      var pnl=Math.round(sh*(pr-entry)*100)/100;
+      var pct=((pr-entry)/entry*100).toFixed(1);
+      var rem=Math.max(0,totalSh-sh);
       preview.style.display='block';
       preview.innerHTML=
-        '賣出 <strong style="color:var(--text)">'+sh+' 股</strong>'
-        +' @ <strong style="color:var(--text)">$'+f2(pr,2)+'</strong>'
-        +'<br>實現損益：<strong style="color:'+(realizedPnl>=0?'var(--green)':'var(--red)')+'">$'+f2(realizedPnl,2)+'</strong>'
-        +' &nbsp;(+'+(((pr-entry)/entry)*100).toFixed(1)+'%)'
-        +'<br>剩餘持倉：<strong style="color:var(--text)">'+Math.max(0,remaining)+' 股</strong>';
+        '賣出 <strong style="color:var(--text)">'+sh+' 股</strong> @ <strong style="color:var(--text)">$'+f2(pr,2)+'</strong><br>'
+        +'實現損益：<strong style="color:'+(pnl>=0?'var(--green)':'var(--red)')+'">$'+f2(pnl,2)+'</strong> (+'+pct+'%)<br>'
+        +'剩餘持倉：<strong style="color:var(--text)">'+rem+' 股</strong>';
     } else {
       preview.style.display='none';
     }
   }
-  sharesInp.addEventListener('input', updatePreview);
-  priceInp.addEventListener('input', updatePreview);
+
+  sharesInp.oninput=updatePreview;
+  priceInp.oninput=updatePreview;
+  document.getElementById('tp-preset-shares').onclick=function(){ sharesInp.value=defaultShares; updatePreview(); };
+  document.getElementById('tp-preset-price').onclick=function(){ if(curPrice){ priceInp.value=f2(curPrice,2); updatePreview(); } };
   updatePreview();
 
-  // Preset buttons
-  document.getElementById('tp-preset-shares').onclick=function(){
-    sharesInp.value=defaultShares; updatePreview();
-  };
-  document.getElementById('tp-preset-price').onclick=function(){
-    if(curPrice){ priceInp.value=curPrice.toFixed(2); updatePreview(); }
-  };
-
-  // Show modal
-  var overlay=document.getElementById('tp-modal');
   overlay.classList.add('show');
+}
 
-  function close(){
-    overlay.classList.remove('show');
-    sharesInp.removeEventListener('input',updatePreview);
-    priceInp.removeEventListener('input',updatePreview);
-    document.getElementById('tp-modal-confirm').onclick=null;
-    document.getElementById('tp-modal-cancel').onclick=null;
-    overlay.onclick=null;
-  }
+// Single confirm handler — reads context from modal dataset
+(function(){
+  var overlay=document.getElementById('tp-modal');
 
-  document.getElementById('tp-modal-confirm').onclick=function(){
-    var sh=parseInt(sharesInp.value)||0;
-    var pr=parseFloat(priceInp.value)||0;
+  document.getElementById('tp-modal-confirm').addEventListener('click', function(){
+    var ticker=overlay.dataset.ticker;
+    var phase=parseInt(overlay.dataset.phase);
+    var totalSh=parseInt(overlay.dataset.totalSh);
+    var sh=parseInt(document.getElementById('tp-inp-shares').value)||0;
+    var pr=parseFloat(document.getElementById('tp-inp-price').value)||0;
+    if(!ticker||isNaN(phase)){ toast('⚠️ 資料錯誤'); return; }
     if(sh<=0||sh>totalSh){ toast('⚠️ 股數無效（1 ~ '+totalSh+'）'); return; }
     if(pr<=0){ toast('⚠️ 請輸入賣出價格'); return; }
-    close();
+    overlay.classList.remove('show');
     executeTpAction(ticker, phase, sh, pr);
-  };
-  document.getElementById('tp-modal-cancel').onclick=close;
-  overlay.onclick=function(e){ if(e.target===overlay) close(); };
-}
+  });
+
+  document.getElementById('tp-modal-cancel').addEventListener('click', function(){
+    document.getElementById('tp-modal').classList.remove('show');
+  });
+
+  document.getElementById('tp-modal').addEventListener('click', function(e){
+    if(e.target===this) this.classList.remove('show');
+  });
+})();
 
 // ── Execute T1 / T2 / T3 ─────────────────────────
 function executeTpAction(ticker, phase, sellShares, sellPrice){
   var group=getGroups().find(function(g){return g.ticker===ticker;});
-  if(!group) return;
+  if(!group){ toast('⚠️ 找不到持倉 '+ticker); return; }
   var entry=group.avgEntry;
 
   // Remove sellShares from lots (smallest lots first)
@@ -1355,7 +1356,7 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
     removed+=canTake;
   });
 
-  // Move stops on remaining lots
+  // Move stops + set phase
   var newStop= phase===1 ? Math.round(entry*1.02*100)/100
              : phase===2 ? Math.round(entry*1.20*100)/100
              : Math.round(entry*1.40*100)/100;
@@ -1365,23 +1366,20 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
     remaining.forEach(function(l){ l.stop=newStop; });
     tpPhase[ticker]=phase;
   } else {
-    // All shares sold → clear position
     delete tpPhase[ticker];
     if(expanded===ticker) expanded=null;
   }
 
-  // Add sell record to trade log
-  if(!window.tradeLog) window.tradeLog=store.get('sepa_trade_log')||[];
+  // Log the trade
+  window.tradeLog=window.tradeLog||store.get('sepa_trade_log')||[];
   window.tradeLog.unshift({
-    id: uid(),
-    ticker: ticker,
-    date: new Date().toISOString().slice(0,10),
-    action: 'SELL_T'+phase,
-    shares: sellShares,
-    price: sellPrice,
-    entry: entry,
-    pnl: Math.round(sellShares*(sellPrice-entry)*100)/100,
-    pct: Math.round((sellPrice-entry)/entry*10000)/100
+    id:uid(), ticker:ticker,
+    date:new Date().toISOString().slice(0,10),
+    action:'SELL_T'+phase,
+    shares:sellShares, price:sellPrice,
+    entry:entry,
+    pnl:Math.round(sellShares*(sellPrice-entry)*100)/100,
+    pct:Math.round((sellPrice-entry)/entry*10000)/100
   });
   store.set('sepa_trade_log', window.tradeLog);
 
@@ -1389,11 +1387,11 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
   saveTpPhase();
   renderAll();
 
-  var realizedPnl=Math.round(sellShares*(sellPrice-entry)*100)/100;
+  var pnl=Math.round(sellShares*(sellPrice-entry)*100)/100;
   if(remaining.length===0){
-    toast('✅ '+ticker+' 已全數清倉 · 實現 $'+f2(realizedPnl,2));
+    toast('✅ '+ticker+' 已清倉 · 實現 $'+f2(pnl,2));
   } else {
-    toast('✅ T'+phase+' 完成 · 賣 '+sellShares+' 股 @ $'+f2(sellPrice,2)+' · 停損→$'+f2(newStop,2));
+    toast('✅ T'+phase+' 完成 · 賣 '+sellShares+' 股 @ $'+f2(sellPrice,2)+' · 停損→$'+f2(newStop,2)+' · 剩 '+remaining.reduce(function(s,l){return s+l.shares;},0)+' 股');
   }
 }
 
