@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SEPA 持倉">
-<title>SEPA 持倉管理 v4.1</title>
+<title>SEPA 持倉管理 v4.2</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -654,6 +654,8 @@ var expanded = null;
 var loading  = false;
 var stopMode = 'price';
 window.tradeLog = store.get('sepa_trade_log') || [];
+// 若 tradeLog 為空且是首次載入，可從此處預填歷史記錄
+// （用 btn-export 匯出後更新 TRADE_HISTORY_JSON secret）
 
 // ── Helpers ───────────────────────────────────────
 function pn(id){ var r=(document.getElementById(id).value||'').replace(/[^\d.]/g,''); var n=parseFloat(r); return isNaN(n)?0:n; }
@@ -1078,12 +1080,15 @@ function renderStats(){
     tv+=c*g.totalShares; tc+=g.totalCost; ml+=(g.avgEntry-g.avgStop)*g.totalShares;
   });
   var pnl=tv-tc,dep=cfg.capital>0?tc/cfg.capital*100:0;
+  var realized=(window.tradeLog||[]).reduce(function(s,t){return s+t.pnl;},0);
+  var totalReturn=pnl+realized;
   var pe=document.getElementById('s-pnl');
-  pe.textContent=n?money(pnl):'—'; pe.style.color=n?pcol(pnl):'var(--muted)';
+  pe.textContent=n?(money(pnl)+(realized?(' + '+money(realized)+' 實現'):'')):'—';
+  pe.style.color=n?pcol(totalReturn):'var(--muted)';
   document.getElementById('s-val').textContent=n?money(tv):'—';
   document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
   document.getElementById('s-loss').textContent=n?money(-ml):'—';
-  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v4.1';
+  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v4.2';
 }
 
 function renderPositions(){
@@ -1175,7 +1180,8 @@ function renderCard(card, g){
       detailHtml=buildVcpPanel(g.ticker)+buildTPPlan(g,cur)+lotsHtml
         +'<div class="detail-grid">'
         +dcc('合計市值',money(pv),'var(--text)')+dcc('加權成本',money(g.totalCost),'var(--muted)')
-        +dcc('總損益',money(pu||0),pcol(pu||0))
+        +dcc('未實現損益',money(pu||0),pcol(pu||0))
+        +(function(){var tlog=(window.tradeLog||[]).filter(function(t){return t.ticker===g.ticker;});var r=tlog.reduce(function(s,t){return s+t.pnl;},0);return tlog.length?dcc('已實現損益',money(r),pcol(r)):'';}())
         +dcc('最大虧損',money(-a.ml),'var(--red)')+dcc('距均停損',f2(a.sg,1)+'%',a.sg<3?'var(--amber)':'var(--text)')
         +dcc('持倉天數',a.days+'天','var(--text)')
         +'</div>'
@@ -1580,7 +1586,11 @@ document.getElementById('btn-clear-all').addEventListener('click', function(){
 
 // Export
 document.getElementById('btn-export').addEventListener('click', function(){
-  document.getElementById('modal-json').textContent=JSON.stringify(lots,null,2);
+  var posJson = JSON.stringify(lots, null, 2);
+  var tradeJson = JSON.stringify(window.tradeLog||[], null, 2);
+  var out = '=== POSITIONS_JSON (貼到 GitHub Secret) ===\n' + posJson
+    + '\n\n=== TRADE_HISTORY_JSON (貼到 GitHub Secret) ===\n' + tradeJson;
+  document.getElementById('modal-json').textContent = out;
   document.getElementById('modal').classList.add('show');
 });
 document.getElementById('btn-mclose').addEventListener('click', function(){ document.getElementById('modal').classList.remove('show'); });
