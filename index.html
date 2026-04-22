@@ -1586,8 +1586,30 @@ document.getElementById('btn-clear-all').addEventListener('click', function(){
 
 // Export
 document.getElementById('btn-export').addEventListener('click', function(){
-  var posJson = JSON.stringify(lots, null, 2);
-  var tradeJson = JSON.stringify(window.tradeLog||[], null, 2);
+  // 為每個 lot 加入 _tp（分批階段）和 _origShares（原始總股數）
+  var tradeLog = window.tradeLog || store.get('sepa_trade_log') || [];
+  var enrichedLots = lots.map(function(lot){
+    var tp = tpPhase[lot.ticker] || 0;
+    // 原始股數 = 現有股數 + 已從 tradeLog 賣出的股數（同 ticker）
+    var soldShares = tradeLog
+      .filter(function(t){ return t.ticker === lot.ticker; })
+      .reduce(function(s,t){ return s + (t.shares||0); }, 0);
+    // 以 group 為單位計算原始股數（避免多 lot 重複加）
+    var groupLots = lots.filter(function(l){ return l.ticker === lot.ticker; });
+    var currentTotal = groupLots.reduce(function(s,l){ return s+l.shares; }, 0);
+    var origTotal = currentTotal + soldShares;
+    var phaseStr = tp === 0 ? '尚未執行分批'
+                 : tp === 1 ? 'T1已執行，剩餘持有'
+                 : tp === 2 ? 'T1+T2已執行，剩餘持有'
+                 : 'T1+T2+T3已執行，剩餘持有';
+    return Object.assign({}, lot, {
+      _tp: tp,
+      _origShares: origTotal,
+      _phaseStr: phaseStr
+    });
+  });
+  var posJson = JSON.stringify(enrichedLots, null, 2);
+  var tradeJson = JSON.stringify(tradeLog, null, 2);
   var out = '=== POSITIONS_JSON (貼到 GitHub Secret) ===\n' + posJson
     + '\n\n=== TRADE_HISTORY_JSON (貼到 GitHub Secret) ===\n' + tradeJson;
   document.getElementById('modal-json').textContent = out;
