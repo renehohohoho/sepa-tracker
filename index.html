@@ -406,6 +406,9 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
     <div class="stat-box"><div class="stat-label">已投入</div><div class="stat-val" id="s-dep" style="color:var(--amber)">—</div></div>
     <div class="stat-box"><div class="stat-label">最大虧損</div><div class="stat-val" id="s-loss" style="color:var(--red)">—</div></div>
   </div>
+  <div id="risk-panel" style="display:none;align-items:center;flex-wrap:wrap;gap:6px;
+    padding:7px 13px;background:var(--bg2);border-top:1px solid var(--bdr);
+    font-size:11px"></div>
   <div class="last-upd" id="last-upd"></div>
 </div>
 
@@ -654,6 +657,47 @@ var expanded = null;
 var loading  = false;
 var stopMode = 'price';
 window.tradeLog = store.get('sepa_trade_log') || [];
+
+// ── 大盤狀態（SPY MA200）────────────────────────────
+var marketState = { spyAbove200: null, spyPrice: null, spyMA200: null, lastCheck: 0 };
+
+function fetchMarketState(cb){
+  // 每 30 分鐘重新抓一次
+  if(marketState.spyAbove200 !== null && Date.now() - marketState.lastCheck < 1800000){
+    cb && cb(); return;
+  }
+  var to = Math.floor(Date.now()/1000);
+  var from = to - 252*24*3600;
+  var url = 'https://query2.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1='+from+'&period2='+to+'&includePrePost=false';
+  function tryFetch(u){
+    return fetch(u,{cache:'no-store'}).then(function(r){
+      if(!r.ok) throw new Error('http '+r.status);
+      return r.json();
+    });
+  }
+  function parseSPY(d){
+    var res=d&&d.chart&&d.chart.result&&d.chart.result[0];
+    if(!res) throw new Error('no result');
+    var closes=res.indicators&&res.indicators.quote&&res.indicators.quote[0]&&res.indicators.quote[0].close||[];
+    var valid=closes.filter(function(c){return c!=null;});
+    if(valid.length<200) throw new Error('insufficient');
+    var last=valid[valid.length-1];
+    var sum=0; for(var i=valid.length-200;i<valid.length;i++) sum+=valid[i];
+    var ma200=sum/200;
+    marketState.spyAbove200 = last > ma200;
+    marketState.spyPrice    = Math.round(last*100)/100;
+    marketState.spyMA200    = Math.round(ma200*100)/100;
+    marketState.lastCheck   = Date.now();
+  }
+  tryFetch(url)
+    .then(parseSPY)
+    .catch(function(){
+      return tryFetch('https://corsproxy.io/?'+encodeURIComponent(url))
+        .then(function(d){ return parseSPY(d.contents?JSON.parse(d.contents):d); });
+    })
+    .catch(function(){ marketState.spyAbove200 = true; /* fallback: 不阻擋 */ })
+    .finally(function(){ cb && cb(); });
+}
 // 若 tradeLog 為空且是首次載入，可從此處預填歷史記錄
 // （用 btn-export 匯出後更新 TRADE_HISTORY_JSON secret）
 
@@ -764,6 +808,14 @@ function analyseVCP(ohlcv){
   var volR=avg20>0?last.v/avg20:0;
   var rHi=-Infinity;
   for(var i=n-21;i<n-1;i++) if(ohlcv[i].h>rHi) rHi=ohlcv[i].h;
+
+  // MA50 / MA150 for trailing stop suggestion
+  var ma50=0,ma150=0;
+  var n50=Math.min(n,50),n150=Math.min(n,150);
+  for(var i=n-n50;i<n;i++) ma50+=ohlcv[i].c;
+  ma50=Math.round(ma50/n50*100)/100;
+  for(var i=n-n150;i<n;i++) ma150+=ohlcv[i].c;
+  ma150=Math.round(ma150/n150*100)/100;
   var isBrk=last.c>rHi,isVol=volR>=1.5;
   var stage=0,note='';
   if(q1.drop>=12)                               {stage=1;note='大跌段 '+q1.drop.toFixed(1)+'%';}
@@ -773,7 +825,8 @@ function analyseVCP(ohlcv){
   if(stage>=4&&isBrk&&isVol)                    {stage=5;note='突破 '+volR.toFixed(1)+'x量';}
   return {stage:stage,status:note,q1:q1.drop,q2:q2.drop,q3:q3.drop,q4:q4.drop,
     t10:t10.drop,volR:volR,isBrk:isBrk,isVol:isVol,
-    buyLow:rHi,buyHigh:rHi*1.02,rHi:rHi};
+    buyLow:rHi,buyHigh:rHi*1.02,rHi:rHi,
+    ma50:ma50,ma150:ma150,lastClose:last.c};
 }
 
 function parseYahooOHLCV(raw){
@@ -944,6 +997,44 @@ function buildVcpPanel(ticker){
         :'⚪ VCP 型態尚未形成，持續監控';
 
   html+='<div class="vcp-rat">'+rat.replace(/\n/g,'<br>')+'</div>';
+
+  // ── 移動停損建議（基於 MA）──────────────────────────
+  if(vcp.ma50 && vcp.lastClose){
+    var grp=getGroups().find(function(g){return g.ticker===ticker;});
+    if(grp){
+      var entry=grp.avgEntry, curStop=grp.avgStop, cur=vcp.lastClose;
+      var pp=(cur-entry)/entry*100;
+      var ma50=vcp.ma50, ma150=vcp.ma150||0;
+      var suggestions=[];
+
+      // 根據獲利階段給出移動停損建議
+      if(pp>=40 && ma50>curStop){
+        suggestions.push({icon:'🏆',txt:'超強勢持倉：停損可移至 50MA $'+f2(ma50,2)+'（目前停損 $'+f2(curStop,2)+'）',col:'var(--purp)'});
+      } else if(pp>=20 && ma50>curStop){
+        suggestions.push({icon:'📌',txt:'T1 後持倉：停損可移至 50MA $'+f2(ma50,2)+' 或保本 +2% $'+f2(entry*1.02,2),col:'var(--green)'});
+      } else if(pp>=5 && ma50>curStop){
+        suggestions.push({icon:'📍',txt:'趨勢持有：停損沿 50MA $'+f2(ma50,2)+' 動態追蹤',col:'var(--grn2)'});
+      }
+      // 50MA 跌破警告
+      if(cur < ma50 && pp > 0){
+        suggestions.push({icon:'⚠️',txt:'收盤跌破 50MA $'+f2(ma50,2)+' — 考慮縮減倉位或緊縮停損',col:'var(--amber)'});
+      }
+      // 150MA 跌破警告
+      if(ma150>0 && cur < ma150){
+        suggestions.push({icon:'🚨',txt:'跌破 150MA $'+f2(ma150,2)+' — 趨勢轉弱，檢視是否出場',col:'var(--red)'});
+      }
+
+      if(suggestions.length){
+        html+='<div style="margin-top:8px;border-top:1px solid var(--bdr);padding-top:8px">';
+        html+='<div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">📐 移動停損建議</div>';
+        suggestions.forEach(function(s){
+          html+='<div style="font-family:var(--mono);font-size:11px;color:'+s.col+';margin-bottom:4px">'+s.icon+' '+s.txt+'</div>';
+        });
+        html+='</div>';
+      }
+    }
+  }
+
   html+='</div>';
   return html;
 }
@@ -1075,9 +1166,12 @@ function renderAll(){ renderStats(); renderPositions(); }
 
 function renderStats(){
   var groups=getGroups(), tv=0,tc=0,ml=0,n=groups.length;
+  var maxPos=0;
   groups.forEach(function(g){
     var pd=prices[g.ticker],c=pd?pd.price:g.avgEntry;
-    tv+=c*g.totalShares; tc+=g.totalCost; ml+=(g.avgEntry-g.avgStop)*g.totalShares;
+    var posVal=c*g.totalShares;
+    tv+=posVal; tc+=g.totalCost; ml+=(g.avgEntry-g.avgStop)*g.totalShares;
+    if(posVal>maxPos) maxPos=posVal;
   });
   var pnl=tv-tc,dep=cfg.capital>0?tc/cfg.capital*100:0;
   var realized=(window.tradeLog||[]).reduce(function(s,t){return s+t.pnl;},0);
@@ -1089,6 +1183,31 @@ function renderStats(){
   document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
   document.getElementById('s-loss').textContent=n?money(-ml):'—';
   document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v4.2';
+
+  // 組合風險面板
+  var riskEl=document.getElementById('risk-panel');
+  if(riskEl && n>0 && cfg.capital>0){
+    var mlPct=ml/cfg.capital*100;
+    var maxPosPct=maxPos/cfg.capital*100;
+    var mlCol=mlPct>5?'var(--red)':mlPct>3?'var(--amber)':'var(--green)';
+    var mxCol=maxPosPct>cfg.maxPosPct?'var(--amber)':'var(--muted)';
+    var spyTxt=marketState.spyAbove200===null?'—':marketState.spyAbove200?'✓ 多頭':'✗ 空頭';
+    var spyCol=marketState.spyAbove200===null?'var(--muted)':marketState.spyAbove200?'var(--green)':'var(--red)';
+    riskEl.innerHTML=
+      '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">最大回撤 </span>'
+      +'<span style="font-family:var(--mono);font-size:12px;color:'+mlCol+'">'+f2(mlPct,1)+'%</span>'
+      +'<span style="color:var(--dim);margin:0 6px">·</span>'
+      +'<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">最大持倉 </span>'
+      +'<span style="font-family:var(--mono);font-size:12px;color:'+mxCol+'">'+f2(maxPosPct,0)+'%</span>'
+      +(maxPosPct>cfg.maxPosPct?'<span style="font-size:10px;color:var(--amber)"> ⚠️</span>':'')
+      +'<span style="color:var(--dim);margin:0 6px">·</span>'
+      +'<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">SPY </span>'
+      +'<span style="font-family:var(--mono);font-size:12px;color:'+spyCol+'">'+spyTxt+'</span>'
+      +(marketState.spyAbove200===false?'<span style="font-size:10px;color:var(--red)"> 加碼訊號已停用</span>':'');
+    riskEl.style.display='flex';
+  } else if(riskEl){
+    riskEl.style.display='none';
+  }
 }
 
 function renderPositions(){
@@ -1118,11 +1237,15 @@ function renderCard(card, g){
   var bkey='watch',bicon='⏳',blabel='載入報價中…';
   if(cur){
     var p2=pp||0,s2=sg||0;
+    var bearish = marketState.spyAbove200 === false;
     if(cur<=g.avgStop||p2<-10){bkey='exit';bicon='🔴';blabel='立即出場';}
     else if(p2>=40){bkey='run';bicon='🏆';blabel='讓利潤奔跑';}
     else if(p2>=20){bkey='trim';bicon='🟡';blabel='出 ⅓ + 移停損';}
     else if(p2>=5&&s2>=3){bkey='hold';bicon='🟢';blabel='持有';}
-    else if(p2>=-2&&p2<5&&s2>=4){bkey='add';bicon='🔵';blabel='可考慮加碼';}
+    else if(p2>=-2&&p2<5&&s2>=4){
+      if(bearish){bkey='watch';bicon='⚪';blabel='空頭勿加碼';}
+      else{bkey='add';bicon='🔵';blabel='可考慮加碼';}
+    }
     else if(p2<0&&cur>g.avgStop){bkey='watch';bicon='⚪';blabel='觀察中';}
     else{bkey='hold';bicon='🟢';blabel='持有';}
   }
@@ -1414,12 +1537,14 @@ function fullRefresh(){
   loading=true;
   var ic=document.getElementById('ri'),lb=document.getElementById('rl');
   ic.className='spinning';lb.textContent='更新中';
-  fetchAll(function(){
-    renderAll();
-    // After price update, run VCP analysis
-    fetchVCPAll(function(){
-      loading=false;ic.className='';lb.textContent='更新';
+  // 先抓大盤狀態，再抓個股報價和 VCP
+  fetchMarketState(function(){
+    fetchAll(function(){
       renderAll();
+      fetchVCPAll(function(){
+        loading=false;ic.className='';lb.textContent='更新';
+        renderAll();
+      });
     });
   });
 }
