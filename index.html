@@ -1054,11 +1054,12 @@ function buildAnalysis(g, pd){
   var days=Math.round((Date.now()-new Date(g.firstDate).getTime())/86400000);
   var rangePos=(pd.high>pd.low)?Math.round((cur-pd.low)/(pd.high-pd.low)*100):50;
   var sig,sigCls,rationale;
-  if(cur<=g.avgStop||pp<-10){sig='🔴 立即出場';sigCls='exit';rationale='現價 $'+f2(cur)+' 已觸及加權停損 $'+f2(g.avgStop,2)+'。依 Minervini 紀律不問理由立即出場，保護本金優先。';}
+  if(cur<=g.avgStop){sig='🔴 立即出場';sigCls='exit';rationale='現價 $'+f2(cur)+' 已觸及加權停損 $'+f2(g.avgStop,2)+'。依 Minervini 紀律不問理由立即出場，保護本金優先。';}
   else if(pp>=40){sig='🏆 超級強勢';sigCls='run';rationale='加權獲利 '+ppct(pp)+'，進入超級強勢區。停損提高至近期支撐，讓利潤繼續奔跑。';}
   else if(pp>=20){sig='🟡 部分獲利';sigCls='trim';rationale='加權獲利 '+ppct(pp)+'，達 Minervini +20% 目標。出售 ⅓ 鎖利，停損移至成本+2%。';}
   else if(pp>=5&&sg>=3){sig='🟢 趨勢持有';sigCls='hold';rationale='持倉健康，加權獲利 '+ppct(pp)+'，距停損 '+f2(sg,1)+'%。趨勢完好，繼續持有。';}
-  else if(pp>=-2&&pp<5&&sg>=4){sig='🔵 可加碼';sigCls='add';rationale='接近進場點，距停損 '+f2(sg,1)+'%。VCP 突破+量能≥1.5x 可加碼，確認大盤方向。';}
+  else if(pp>=-2&&pp<5&&sg>=4&&(vcpData[g.ticker]&&vcpData[g.ticker].stage>=4)){sig='🔵 可加碼';sigCls='add';rationale='接近進場點，距停損 '+f2(sg,1)+'%。VCP 已達第'+vcpData[g.ticker].stage+'階段，突破+量能≥1.5x 確認後可加碼。';}
+  else if(pp>=-2&&pp<5&&sg>=4){sig='⚪ 觀察中';sigCls='watch';rationale='接近進場點，距停損 '+f2(sg,1)+'%，但 VCP 尚未到位，觀察形態發展。';}
   else if(pp<0&&cur>g.avgStop){sig='⚪ 觀察中';sigCls='watch';rationale='小幅虧損（'+ppct(pp)+'），在停損上方 '+f2(sg,1)+'%。觀察量能和均線，若繼續走弱準備出場。';}
   else{sig='🟢 正常持有';sigCls='hold';rationale='持倉正常，繼續追蹤技術面發展。';}
   return {sig:sig,sigCls:sigCls,rationale:rationale,rv:rv,ml:ml,days:days,sg:sg,pp:pp,rangePos:rangePos};
@@ -1124,7 +1125,7 @@ function buildTPPlan(g, cur){
   var t3sh= shares; // always all remaining
   var actions=[
     {label:'T1 出 ⅓',sub:'出 '+t1sh+' 股\n停損→成本+2%',cls:'t1-btn',phase:1},
-    {label:'T2 再出 ½',sub:'再出 '+t2sh+' 股\n停損→+20%',cls:'t2-btn',phase:2},
+    {label:'T2 再出 ⅓',sub:'再出 '+t2sh+' 股\n停損→+20%',cls:'t2-btn',phase:2},
     {label:'T3 清倉',sub:'出清剩餘 '+t3sh+' 股\n完成交易',cls:'t3-btn',phase:3},
   ];
   html+='<div class="tp-actions">';
@@ -1238,7 +1239,7 @@ function renderCard(card, g){
   if(cur){
     var p2=pp||0,s2=sg||0;
     var bearish = marketState.spyAbove200 === false;
-    if(cur<=g.avgStop||p2<-10){bkey='exit';bicon='🔴';blabel='立即出場';}
+    if(cur<=g.avgStop){bkey='exit';bicon='🔴';blabel='立即出場';}
     else if(p2>=40){bkey='run';bicon='🏆';blabel='讓利潤奔跑';}
     else if(p2>=20){bkey='trim';bicon='🟡';blabel='出 ⅓ + 移停損';}
     else if(p2>=5&&s2>=3){bkey='hold';bicon='🟢';blabel='持有';}
@@ -1383,7 +1384,7 @@ function openTpModal(ticker, phase){
                   : phase===2 ? Math.round(entry*1.20*100)/100
                   : Math.round(entry*1.40*100)/100;
   var phaseCol= phase===1?'var(--amber)': phase===2?'var(--grn2)':'var(--green)';
-  var phaseLabel= phase===1?'T1 出 ⅓': phase===2?'T2 再出 ½':'T3 清倉';
+  var phaseLabel= phase===1?'T1 出 ⅓': phase===2?'T2 再出 ⅓':'T3 清倉';
 
   // Store context on modal for confirm handler
   var overlay=document.getElementById('tp-modal');
