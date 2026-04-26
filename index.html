@@ -262,7 +262,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 .settings-row-desc{font-size:11px;font-family:var(--mono);color:var(--muted)}
 .settings-input{background:var(--bg2);border:1px solid var(--bdr2);border-radius:8px;
   color:var(--text);padding:10px 13px;font-family:var(--mono);font-size:16px;
-  outline:none;width:110px;text-align:right;-webkit-appearance:none;
+  outline:none;width:110px;text-align:right;-webkit-appearance:none;appearance:none;
   caret-color:var(--green);min-height:44px}
 .settings-input:focus{border-color:var(--green)}
 .settings-input-wide{width:160px}
@@ -373,7 +373,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 <!-- Cache buster: forces iOS Safari to reload from network, not disk cache -->
 <script>
 (function(){
-  var VER='4.1';
+  var VER='4.2';
   var stored=sessionStorage.getItem('sepa_ver');
   if(stored!==VER){
     sessionStorage.setItem('sepa_ver',VER);
@@ -519,7 +519,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
         <div class="settings-row-title">Finnhub API Key</div>
         <div class="settings-row-desc">免費方案：60 次/分鐘</div>
       </div>
-      <input type="text" class="settings-input settings-input-wide" id="cfg-apikey" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="your_key">
+      <input type="password" class="settings-input settings-input-wide" id="cfg-apikey" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="your_key">
     </div>
   </div>
 
@@ -536,7 +536,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
     </div>
   </div>
 
-  <div class="version-tag">SEPA Tracker v3.1 · Minervini SEPA + VCP Strategy</div>
+  <div class="version-tag">SEPA Tracker v4.2 · Minervini SEPA + VCP Strategy</div>
 </div>
 </div>
 
@@ -569,7 +569,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
           <input type="number" id="tp-inp-shares" inputmode="numeric" min="1"
             style="flex:1;background:var(--card);border:1px solid var(--bdr2);border-radius:10px;
             padding:12px 14px;font-family:var(--mono);font-size:16px;color:var(--text);
-            outline:none;-webkit-appearance:none">
+            outline:none;-webkit-appearance:none;appearance:none">
           <button type="button" id="tp-preset-shares"
             style="background:rgba(255,176,32,.12);border:1px solid rgba(255,176,32,.3);color:var(--amber);
             border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:11px;cursor:pointer;white-space:nowrap">
@@ -583,7 +583,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
           <input type="number" id="tp-inp-price" inputmode="decimal" step="0.01" min="0.01"
             style="flex:1;background:var(--card);border:1px solid var(--bdr2);border-radius:10px;
             padding:12px 14px;font-family:var(--mono);font-size:16px;color:var(--text);
-            outline:none;-webkit-appearance:none">
+            outline:none;-webkit-appearance:none;appearance:none">
           <button type="button" id="tp-preset-price"
             style="background:rgba(0,184,101,.12);border:1px solid rgba(0,184,101,.3);color:var(--grn2);
             border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:11px;cursor:pointer;white-space:nowrap">
@@ -643,7 +643,7 @@ var cfg = Object.assign({
   maxLossPct: 2,
   defStopPct: 7,
   maxPosPct: 25,
-  apiKey: 'd7a565hr01qn9i7jmkk0d7a565hr01qn9i7jmkkg'
+  apiKey: ''
 }, store.get('sepa_cfg') || {});
 
 function saveCfg(){ store.set('sepa_cfg', cfg); }
@@ -657,6 +657,19 @@ var expanded = null;
 var loading  = false;
 var stopMode = 'price';
 window.tradeLog = store.get('sepa_trade_log') || [];
+lots = lots.filter(function(lot){
+  return lot && isValidTicker(String(lot.ticker||'')) &&
+    Number(lot.entry)>0 && Number(lot.shares)>0 && Number(lot.stop)>0;
+}).map(function(lot){
+  return Object.assign({}, lot, {
+    ticker:String(lot.ticker).toUpperCase(),
+    entry:Number(lot.entry),
+    shares:Number(lot.shares),
+    stop:Number(lot.stop),
+    date:String(lot.date||new Date().toISOString().slice(0,10)),
+    notes:String(lot.notes||'')
+  });
+});
 
 // ── 大盤狀態（SPY MA200）────────────────────────────
 var marketState = { spyAbove200: null, spyPrice: null, spyMA200: null, lastCheck: 0 };
@@ -709,6 +722,19 @@ function money(n){ var a=Math.abs(Math.round(n)); return (n<0?'-$':'$')+a.toLoca
 function ppct(n){ return (n>=0?'+':'')+f2(n,1)+'%'; }
 function pcol(n){ return n>0?'var(--green)':n<0?'var(--red)':'var(--muted)'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function esc(v){
+  return String(v==null?'':v).replace(/[&<>"']/g,function(ch){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+  });
+}
+function isValidTicker(ticker){ return /^[A-Z][A-Z0-9.-]{0,9}$/.test(ticker); }
+function findCard(wrap,ticker){
+  var cards=wrap.querySelectorAll('.pos-card');
+  for(var i=0;i<cards.length;i++){
+    if(cards[i].getAttribute('data-ticker')===ticker) return cards[i];
+  }
+  return null;
+}
 
 function toast(msg,ms){
   var el=document.getElementById('toast');
@@ -759,6 +785,7 @@ updateMkt(); setInterval(updateMkt,30000);
 
 // ── Finnhub fetch ─────────────────────────────────
 function fetchOne(ticker){
+  if(!cfg.apiKey) return Promise.reject(new Error('missing api key'));
   return fetch('https://finnhub.io/api/v1/quote?symbol='+encodeURIComponent(ticker)+'&token='+cfg.apiKey)
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -1069,6 +1096,7 @@ function buildAnalysis(g, pd){
 // ── Build Take Profit Plan ────────────────────────
 function buildTPPlan(g, cur){
   var entry=g.avgEntry, stop=g.avgStop, shares=g.totalShares;
+  var tickerAttr=esc(g.ticker);
   var maxLoss=Math.abs(Math.round((entry-stop)*shares)); // stop may be above entry after T1 move
   if(shares<=0) return '';
   var pp=cur?(cur-entry)/entry*100:0;
@@ -1136,7 +1164,7 @@ function buildTPPlan(g, cur){
     var btnCls='tp-act-btn '+(isDone?'done-btn':(isNext?a.cls+' next-btn':a.cls));
     var icon=isDone?'✅':(isNext?'👉':'○');
     html+='<button type="button" class="'+btnCls+'"'
-      +(isDone?'':' data-tp-action="'+a.phase+'" data-ticker="'+g.ticker+'"')
+      +(isDone?'':' data-tp-action="'+a.phase+'" data-ticker="'+tickerAttr+'"')
       +' style="'+(isNext?'flex:2;':'flex:1;')+'">'
       +'<span class="tp-act-badge">'+icon+'</span>'
       +'<span style="font-size:'+(isNext?'12':'11')+'px;font-weight:'+(isNext?'700':'400')+'">'+a.label+'</span>'
@@ -1171,7 +1199,7 @@ function renderStats(){
   groups.forEach(function(g){
     var pd=prices[g.ticker],c=pd?pd.price:g.avgEntry;
     var posVal=c*g.totalShares;
-    tv+=posVal; tc+=g.totalCost; ml+=(g.avgEntry-g.avgStop)*g.totalShares;
+    tv+=posVal; tc+=g.totalCost; ml+=Math.max(0,(g.avgEntry-g.avgStop)*g.totalShares);
     if(posVal>maxPos) maxPos=posVal;
   });
   var pnl=tv-tc,dep=cfg.capital>0?tc/cfg.capital*100:0;
@@ -1219,7 +1247,7 @@ function renderPositions(){
   var tickers=groups.map(function(g){return g.ticker;});
   wrap.querySelectorAll('.pos-card').forEach(function(el){ if(tickers.indexOf(el.getAttribute('data-ticker'))<0) el.remove(); });
   groups.forEach(function(g,idx){
-    var card=wrap.querySelector('.pos-card[data-ticker="'+g.ticker+'"]');
+    var card=findCard(wrap,g.ticker);
     if(!card){ card=document.createElement('div'); card.className='pos-card'; card.setAttribute('data-ticker',g.ticker); wrap.appendChild(card); }
     var ch=wrap.querySelectorAll('.pos-card'); if(ch[idx]!==card) wrap.insertBefore(card,ch[idx]||null);
     renderCard(card,g);
@@ -1234,6 +1262,8 @@ function renderCard(card, g){
   var sg=cur?(cur-g.avgStop)/cur*100:null;
   var ie=expanded===g.ticker;
   var nlots=g.lots.length;
+  var tickerHtml=esc(g.ticker);
+  var tickerAttr=esc(g.ticker);
 
   var bkey='watch',bicon='⏳',blabel='載入報價中…';
   if(cur){
@@ -1271,11 +1301,11 @@ function renderCard(card, g){
       var lotPnlPct=cur?(cur-lot.entry)/lot.entry*100:null;
       var lotPnlColor=lotPnl!==null?pcol(lotPnl):'var(--muted)';
       lotsHtml+='<div class="lot-row">'
-        +'<span class="lot-date">'+lot.date+'</span>'
-        +'<span class="lot-val">'+lot.shares+'股 @$'+f2(lot.entry,2)+'</span>'
+        +'<span class="lot-date">'+esc(lot.date)+'</span>'
+        +'<span class="lot-val">'+esc(lot.shares)+'股 @$'+f2(lot.entry,2)+'</span>'
         +'<span class="lot-val" style="color:var(--red)">停$'+f2(lot.stop,2)+'</span>'
         +'<span class="lot-pnl" style="color:'+lotPnlColor+'">'+(lotPnl!==null?money(lotPnl)+'<br><span style="font-size:9px">'+ppct(lotPnlPct||0)+'</span>':'—')+'</span>'
-        +'<button type="button" class="lot-del" data-lot-id="'+lot.id+'" data-ticker="'+g.ticker+'">✕</button>'
+        +'<button type="button" class="lot-del" data-lot-id="'+esc(lot.id)+'" data-ticker="'+tickerAttr+'">✕</button>'
         +'</div>';
     });
     lotsHtml+='</div>';
@@ -1289,11 +1319,11 @@ function renderCard(card, g){
         var phaseLabel=t.action==='SELL_T1'?'T1':t.action==='SELL_T2'?'T2':'T3';
         var pnlCol=t.pnl>=0?'var(--green)':'var(--red)';
         lotsHtml+='<div class="lot-row" style="background:rgba(0,184,101,.04);border-color:rgba(0,184,101,.15)">'
-          +'<span class="lot-date">'+t.date+'</span>'
-          +'<span class="lot-val" style="color:var(--grn2)">'+phaseLabel+' 賣 '+t.shares+' 股</span>'
+          +'<span class="lot-date">'+esc(t.date)+'</span>'
+          +'<span class="lot-val" style="color:var(--grn2)">'+phaseLabel+' 賣 '+esc(t.shares)+' 股</span>'
           +'<span class="lot-val">@$'+f2(t.price,2)+'</span>'
           +'<span class="lot-pnl" style="color:'+pnlCol+'">'+money(t.pnl)+'<br><span style="font-size:9px">'+ppct(t.pct)+'</span></span>'
-          +'<button type="button" class="lot-del" data-trade-id="'+t.id+'" data-ticker="'+g.ticker+'">✕</button>'
+          +'<button type="button" class="lot-del" data-trade-id="'+esc(t.id)+'" data-ticker="'+tickerAttr+'">✕</button>'
           +'</div>';
       });
       lotsHtml+='</div>';
@@ -1335,13 +1365,13 @@ function renderCard(card, g){
     } else {
       detailHtml=buildVcpPanel(g.ticker)+buildTPPlan(g,null)+lotsHtml+'<div style="padding:10px;font-family:var(--mono);font-size:12px;color:var(--muted)">⏳ 點右上角「更新」載入報價</div>';
     }
-    if(g.notes) detailHtml+='<div class="pos-notes">📝 '+g.notes+'</div>';
-    detailHtml+='<div class="detail-actions"><button type="button" class="btn-sm danger" data-action="delete-all" data-ticker="'+g.ticker+'">🗑 清除 '+g.ticker+' 所有部位</button></div>';
+    if(g.notes) detailHtml+='<div class="pos-notes">📝 '+esc(g.notes)+'</div>';
+    detailHtml+='<div class="detail-actions"><button type="button" class="btn-sm danger" data-action="delete-all" data-ticker="'+tickerAttr+'">🗑 清除 '+tickerHtml+' 所有部位</button></div>';
   }
 
   card.innerHTML=(
-    '<div class="pos-main" data-toggle="'+g.ticker+'">'
-    +'<div><div class="pos-ticker">'+g.ticker+'</div>'
+    '<div class="pos-main" data-toggle="'+tickerAttr+'">'
+    +'<div><div class="pos-ticker">'+tickerHtml+'</div>'
     +'<div class="pos-lots">'+(nlots>1?nlots+' 筆 · ':'')+g.totalShares+' 股</div>'
     +'<div class="sig-badge '+bkey+'">'+bicon+' '+blabel+'</div></div>'
     +'<div class="pos-middle">'
@@ -1403,7 +1433,7 @@ function openTpModal(ticker, phase){
   document.getElementById('tp-modal-confirm').style.background=phaseCol;
 
   document.getElementById('tp-modal-info').innerHTML=
-    '<span style="color:var(--text)">'+ticker+'</span>'
+    '<span style="color:var(--text)">'+esc(ticker)+'</span>'
     +' &nbsp;·&nbsp; 現持 <strong style="color:var(--text)">'+totalSh+' 股</strong>'
     +' &nbsp;·&nbsp; 均價 <strong style="color:var(--text)">$'+f2(entry,2)+'</strong>'
     +(curPrice?' &nbsp;·&nbsp; 現價 <strong style="color:var(--green)">$'+f2(curPrice,2)+'</strong>':'');
@@ -1535,6 +1565,10 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
 // ── Full refresh ──────────────────────────────────
 function fullRefresh(){
   if(loading)return;
+  if(!cfg.apiKey){
+    toast('⚠️ 請先到設定輸入 Finnhub API Key');
+    return;
+  }
   loading=true;
   var ic=document.getElementById('ri'),lb=document.getElementById('rl');
   ic.className='spinning';lb.textContent='更新中';
@@ -1578,8 +1612,10 @@ function addLot(){
   var entry=pn('f-entry'), shares=pn('f-shares'), stopRaw=pn('f-stop');
   var date=document.getElementById('f-date').value, notes=(document.getElementById('f-notes').value||'').trim();
   if(!ticker){ toast('⚠️ 請輸入股票代號'); return; }
+  if(!isValidTicker(ticker)){ toast('⚠️ 股票代號格式不正確'); return; }
   if(!entry){ toast('⚠️ 請輸入進場價'); return; }
   if(!shares){ toast('⚠️ 請輸入股數'); return; }
+  if(shares<=0||shares%1!==0){ toast('⚠️ 股數請輸入正整數'); return; }
   if(!stopRaw){ toast('⚠️ 請輸入停損'); return; }
   var stop;
   if(stopMode==='pct'){
@@ -1595,9 +1631,9 @@ function addLot(){
   document.getElementById('stop-hint').textContent='';
   expanded=ticker;
   renderAll();
-  toast('✅ '+ticker+' '+(lots.filter(function(l){return l.ticker===ticker;}).length>1?'加碼已加入':'已加入')+' · 抓取報價中…');
+  toast('✅ '+ticker+' '+(lots.filter(function(l){return l.ticker===ticker;}).length>1?'加碼已加入':'已加入')+(cfg.apiKey?' · 抓取報價中…':' · 請到設定輸入 Finnhub API Key'));
   // Fetch both Finnhub quote and Yahoo OHLCV for VCP
-  fetchOne(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
+  if(cfg.apiKey) fetchOne(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
   fetchOHLCV(ticker).then(function(ohlcv){vcpData[ticker]=analyseVCP(ohlcv);renderAll();}).catch(function(){});
 }
 
@@ -1698,7 +1734,7 @@ document.getElementById('btn-save-settings').addEventListener('click', function(
   cfg.defStopPct= pnv(document.getElementById('cfg-defstop').value)||7;
   cfg.maxPosPct = pnv(document.getElementById('cfg-maxpos').value)||25;
   var k=(document.getElementById('cfg-apikey').value||'').trim();
-  if(k) cfg.apiKey=k;
+  cfg.apiKey=k;
   saveCfg();
   renderStats();
   if(stopMode==='pct') document.getElementById('f-stop').placeholder=cfg.defStopPct+'%';
@@ -1706,7 +1742,7 @@ document.getElementById('btn-save-settings').addEventListener('click', function(
 });
 document.getElementById('btn-clear-all').addEventListener('click', function(){
   if(!confirm('確定要清除所有持倉嗎？此操作無法復原。')) return;
-  lots=[]; expanded=null; saveLots(); renderAll();
+  lots=[]; tpPhase={}; expanded=null; saveLots(); saveTpPhase(); renderAll();
   toast('🗑 所有持倉已清除');
 });
 
