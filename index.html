@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SEPA 持倉">
-<title>SEPA 持倉管理 v4.2</title>
+<title>SEPA 持倉管理 v5.0</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -347,6 +347,29 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 .tp-row.tp-hit{opacity:.4;text-decoration:line-through}
 .tp-row.tp-active{border-color:var(--amber)!important;background:rgba(255,176,32,.05)!important}
 
+/* ── PHASE BADGE (collapsed card) ───────────────── */
+.tp-phase-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;
+  border-radius:8px;font-family:var(--mono);font-size:9px;font-weight:600;
+  background:rgba(0,184,101,.15);border:1px solid rgba(0,184,101,.3);
+  color:var(--grn2);margin-top:3px;letter-spacing:.02em;white-space:nowrap}
+
+/* ── CUSTOM TRADE ────────────────────────────────── */
+.btn-sm.btn-custom{border-color:rgba(77,159,255,.35);color:var(--blue)}
+.btn-sm.btn-custom:active{border-color:var(--blue);background:rgba(77,159,255,.08)}
+.ct-type-toggle{display:flex;background:var(--bg2);border:1px solid var(--bdr);
+  border-radius:10px;overflow:hidden;height:44px;margin-bottom:2px}
+.ct-tab{flex:1;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:13px;color:var(--muted);
+  cursor:pointer;border:none;background:none;transition:background .15s,color .15s}
+.ct-tab.active.sell{background:var(--amber);color:#000;font-weight:700}
+.ct-tab.active.buy{background:var(--blue);color:#000;font-weight:700}
+.ct-field-lbl{font-family:var(--mono);font-size:10px;color:var(--muted);
+  margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em}
+.ct-input{width:100%;background:var(--card);border:1px solid var(--bdr2);border-radius:10px;
+  color:var(--text);padding:12px 14px;font-family:var(--mono);font-size:16px;
+  outline:none;-webkit-appearance:none;appearance:none;min-height:48px;caret-color:var(--green)}
+.ct-input:focus{border-color:var(--green)}
+
 /* ── TP QUICK ACTIONS ──────────────────────────── */
 .tp-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .tp-act-btn{flex:1;min-width:0;padding:10px 8px;border-radius:10px;border:1px solid;
@@ -536,7 +559,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
     </div>
   </div>
 
-  <div class="version-tag">SEPA Tracker v4.2 · Minervini SEPA + VCP Strategy</div>
+  <div class="version-tag">SEPA Tracker v5.0 · Minervini SEPA + VCP Strategy</div>
 </div>
 </div>
 
@@ -605,6 +628,51 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
         ✅ 確認執行
       </button>
       <button type="button" id="tp-modal-cancel" class="btn-mclose">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- CUSTOM TRADE MODAL -->
+<div class="modal-overlay" id="ct-modal">
+  <div class="modal" style="gap:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="modal-title">📝 記錄自訂交易</div>
+      <div id="ct-ticker-lbl" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green)"></div>
+    </div>
+
+    <div class="ct-type-toggle">
+      <button type="button" id="ct-tab-sell" class="ct-tab active sell">賣出</button>
+      <button type="button" id="ct-tab-buy" class="ct-tab buy">買入（加碼）</button>
+    </div>
+
+    <div id="ct-modal-info" style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.9"></div>
+
+    <div>
+      <div class="ct-field-lbl">日期</div>
+      <input type="date" id="ct-date" class="ct-input">
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <div class="ct-field-lbl">股數</div>
+        <input type="number" id="ct-shares" class="ct-input" inputmode="numeric" min="1" placeholder="100">
+      </div>
+      <div>
+        <div class="ct-field-lbl">價格</div>
+        <input type="number" id="ct-price" class="ct-input" inputmode="decimal" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+
+    <div>
+      <div class="ct-field-lbl">備注（選填）</div>
+      <input type="text" id="ct-notes" class="ct-input" style="font-size:14px" placeholder="操作原因…">
+    </div>
+
+    <div id="ct-preview" style="display:none;background:rgba(0,240,138,.04);border:1px solid rgba(0,240,138,.12);border-radius:10px;padding:12px 14px;font-family:var(--mono);font-size:11px;line-height:2"></div>
+
+    <div class="modal-btns">
+      <button type="button" id="ct-confirm" style="border:none;border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;flex:1;min-height:50px;background:var(--amber);color:#000">✅ 確認記錄</button>
+      <button type="button" id="ct-cancel" class="btn-mclose">取消</button>
     </div>
   </div>
 </div>
@@ -1211,7 +1279,7 @@ function renderStats(){
   document.getElementById('s-val').textContent=n?money(tv):'—';
   document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
   document.getElementById('s-loss').textContent=n?money(-ml):'—';
-  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v4.2';
+  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v5.0';
 
   // 組合風險面板
   var riskEl=document.getElementById('risk-panel');
@@ -1313,20 +1381,45 @@ function renderCard(card, g){
     // Sell history for this ticker
     var allTrades=(window.tradeLog||store.get('sepa_trade_log')||[]).filter(function(t){return t.ticker===g.ticker;});
     if(allTrades.length){
-      lotsHtml+='<div class="lots-section" style="margin-top:8px">'
-        +'<div class="lots-title" style="color:var(--grn2)">💰 '+allTrades.length+' 筆已實現獲利</div>';
-      allTrades.forEach(function(t){
-        var phaseLabel=t.action==='SELL_T1'?'T1':t.action==='SELL_T2'?'T2':'T3';
-        var pnlCol=t.pnl>=0?'var(--green)':'var(--red)';
-        lotsHtml+='<div class="lot-row" style="background:rgba(0,184,101,.04);border-color:rgba(0,184,101,.15)">'
-          +'<span class="lot-date">'+esc(t.date)+'</span>'
-          +'<span class="lot-val" style="color:var(--grn2)">'+phaseLabel+' 賣 '+esc(t.shares)+' 股</span>'
-          +'<span class="lot-val">@$'+f2(t.price,2)+'</span>'
-          +'<span class="lot-pnl" style="color:'+pnlCol+'">'+money(t.pnl)+'<br><span style="font-size:9px">'+ppct(t.pct)+'</span></span>'
-          +'<button type="button" class="lot-del" data-trade-id="'+esc(t.id)+'" data-ticker="'+tickerAttr+'">✕</button>'
-          +'</div>';
-      });
-      lotsHtml+='</div>';
+      var sellTrades=allTrades.filter(function(t){return t.action!=='BUY_ADD';});
+      var buyTrades=allTrades.filter(function(t){return t.action==='BUY_ADD';});
+      if(sellTrades.length){
+        lotsHtml+='<div class="lots-section" style="margin-top:8px">'
+          +'<div class="lots-title" style="color:var(--grn2)">💰 '+sellTrades.length+' 筆賣出記錄</div>';
+        sellTrades.forEach(function(t){
+          var actionMap={SELL_T1:'T1止盈',SELL_T2:'T2止盈',SELL_T3:'T3止盈',SELL_CUSTOM:'自訂賣出'};
+          var phaseLabel=actionMap[t.action]||'出場';
+          var isCust=t.action==='SELL_CUSTOM';
+          var pnlCol=t.pnl>=0?'var(--green)':'var(--red)';
+          var rowBg=isCust?'rgba(77,159,255,.04)':'rgba(0,184,101,.04)';
+          var rowBdr=isCust?'rgba(77,159,255,.15)':'rgba(0,184,101,.15)';
+          var lblCol=isCust?'var(--blue)':'var(--grn2)';
+          lotsHtml+='<div class="lot-row" style="background:'+rowBg+';border-color:'+rowBdr+'">'
+            +'<span class="lot-date">'+esc(t.date)+'</span>'
+            +'<span class="lot-val" style="color:'+lblCol+'">'+esc(phaseLabel)+' '+esc(t.shares)+' 股</span>'
+            +'<span class="lot-val">@$'+f2(t.price,2)+'</span>'
+            +'<span class="lot-pnl" style="color:'+pnlCol+'">'+money(t.pnl)+'<br><span style="font-size:9px">'+ppct(t.pct)+'</span></span>'
+            +'<button type="button" class="lot-del" data-trade-id="'+esc(t.id)+'" data-ticker="'+tickerAttr+'">✕</button>'
+            +'</div>'
+            +(t.notes?'<div style="font-family:var(--mono);font-size:9px;color:var(--muted);padding:2px 10px 5px;border-left:2px solid var(--bdr)">'+esc(t.notes)+'</div>':'');
+        });
+        lotsHtml+='</div>';
+      }
+      if(buyTrades.length){
+        lotsHtml+='<div class="lots-section" style="margin-top:8px">'
+          +'<div class="lots-title" style="color:var(--blue)">📈 '+buyTrades.length+' 筆加碼記錄</div>';
+        buyTrades.forEach(function(t){
+          lotsHtml+='<div class="lot-row" style="background:rgba(77,159,255,.04);border-color:rgba(77,159,255,.15)">'
+            +'<span class="lot-date">'+esc(t.date)+'</span>'
+            +'<span class="lot-val" style="color:var(--blue)">加碼 '+esc(t.shares)+' 股</span>'
+            +'<span class="lot-val">@$'+f2(t.price,2)+'</span>'
+            +'<span class="lot-pnl" style="color:var(--muted)">—</span>'
+            +'<button type="button" class="lot-del" data-trade-id="'+esc(t.id)+'" data-ticker="'+tickerAttr+'">✕</button>'
+            +'</div>'
+            +(t.notes?'<div style="font-family:var(--mono);font-size:9px;color:var(--muted);padding:2px 10px 5px;border-left:2px solid var(--bdr)">'+esc(t.notes)+'</div>':'');
+        });
+        lotsHtml+='</div>';
+      }
     }
 
     if(cur && pd){
@@ -1366,13 +1459,25 @@ function renderCard(card, g){
       detailHtml=buildVcpPanel(g.ticker)+buildTPPlan(g,null)+lotsHtml+'<div style="padding:10px;font-family:var(--mono);font-size:12px;color:var(--muted)">⏳ 點右上角「更新」載入報價</div>';
     }
     if(g.notes) detailHtml+='<div class="pos-notes">📝 '+esc(g.notes)+'</div>';
-    detailHtml+='<div class="detail-actions"><button type="button" class="btn-sm danger" data-action="delete-all" data-ticker="'+tickerAttr+'">🗑 清除 '+tickerHtml+' 所有部位</button></div>';
+    detailHtml+='<div class="detail-actions">'
+      +'<button type="button" class="btn-sm btn-custom" data-action="custom-trade" data-ticker="'+tickerAttr+'">📝 自訂交易</button>'
+      +'<button type="button" class="btn-sm danger" data-action="delete-all" data-ticker="'+tickerAttr+'">🗑 清除 '+tickerHtml+' 所有部位</button>'
+      +'</div>';
   }
+
+  // Phase tag for collapsed card view
+  var phTag=(function(){
+    var ph=tpPhase[g.ticker]||0;
+    if(!ph) return '';
+    var labels=['','T1 ✓ → T2','T2 ✓ → T3','已清倉'];
+    return '<div class="tp-phase-tag">'+labels[Math.min(ph,3)]+'</div>';
+  }());
 
   card.innerHTML=(
     '<div class="pos-main" data-toggle="'+tickerAttr+'">'
     +'<div><div class="pos-ticker">'+tickerHtml+'</div>'
     +'<div class="pos-lots">'+(nlots>1?nlots+' 筆 · ':'')+g.totalShares+' 股</div>'
+    +phTag
     +'<div class="sig-badge '+bkey+'">'+bicon+' '+blabel+'</div></div>'
     +'<div class="pos-middle">'
     +'<div class="pos-pnl-row">'+pnlHtml+'</div>'
@@ -1562,6 +1667,146 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
   }
 }
 
+// ── Custom Trade Modal ────────────────────────────
+var ctMode='sell';
+
+function openCustomTradeModal(ticker){
+  var group=getGroups().find(function(g){return g.ticker===ticker;});
+  if(!group){toast('⚠️ 找不到持倉');return;}
+  var overlay=document.getElementById('ct-modal');
+  overlay.dataset.ticker=ticker;
+  overlay.dataset.entry=group.avgEntry;
+  overlay.dataset.totalSh=group.totalShares;
+
+  document.getElementById('ct-ticker-lbl').textContent=ticker;
+  document.getElementById('ct-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('ct-shares').value='';
+  document.getElementById('ct-notes').value='';
+  document.getElementById('ct-preview').style.display='none';
+
+  var curPrice=(prices[ticker]&&prices[ticker].price)||null;
+  document.getElementById('ct-price').value=curPrice?f2(curPrice,2):'';
+
+  document.getElementById('ct-modal-info').innerHTML=
+    '持有 <strong style="color:var(--text)">'+group.totalShares+' 股</strong>'
+    +' · 均價 <strong style="color:var(--text)">$'+f2(group.avgEntry,2)+'</strong>'
+    +(curPrice?' · 現價 <strong style="color:var(--green)">$'+f2(curPrice,2)+'</strong>':'');
+
+  setCtMode('sell');
+  overlay.classList.add('show');
+}
+
+function setCtMode(mode){
+  ctMode=mode;
+  document.getElementById('ct-tab-sell').className='ct-tab'+(mode==='sell'?' active sell':'sell');
+  document.getElementById('ct-tab-buy').className='ct-tab'+(mode==='buy'?' active buy':'buy');
+  document.getElementById('ct-confirm').style.background=mode==='sell'?'var(--amber)':'var(--blue)';
+  updateCtPreview();
+}
+
+function updateCtPreview(){
+  var overlay=document.getElementById('ct-modal');
+  var entry=parseFloat(overlay.dataset.entry)||0;
+  var totalSh=parseInt(overlay.dataset.totalSh)||0;
+  var sh=parseInt(document.getElementById('ct-shares').value)||0;
+  var pr=parseFloat(document.getElementById('ct-price').value)||0;
+  var preview=document.getElementById('ct-preview');
+  if(sh>0&&pr>0){
+    preview.style.display='block';
+    if(ctMode==='sell'){
+      var pnl=Math.round(sh*(pr-entry)*100)/100;
+      var pct=entry>0?((pr-entry)/entry*100).toFixed(1):'—';
+      var rem=Math.max(0,totalSh-sh);
+      preview.innerHTML='賣出 <strong style="color:var(--text)">'+sh+' 股</strong> @ $'+f2(pr,2)+'<br>'
+        +'實現損益：<strong style="color:'+(pnl>=0?'var(--green)':'var(--red)')+'">$'+f2(Math.abs(pnl),2)+(pnl>=0?' 獲利':' 虧損')+'</strong> ('+pct+'%)<br>'
+        +'剩餘持倉：<strong style="color:var(--text)">'+rem+' 股</strong>';
+    } else {
+      preview.innerHTML='買入 <strong style="color:var(--text)">'+sh+' 股</strong> @ $'+f2(pr,2)+'<br>'
+        +'新增成本：<strong style="color:var(--text)">$'+f2(sh*pr,2)+'</strong>';
+    }
+  } else {
+    preview.style.display='none';
+  }
+}
+
+function executeCustomTrade(ticker,mode,shares,price,date,notes){
+  var group=getGroups().find(function(g){return g.ticker===ticker;});
+  if(!group){toast('⚠️ 找不到持倉 '+ticker);return;}
+  var entry=group.avgEntry;
+  window.tradeLog=window.tradeLog||store.get('sepa_trade_log')||[];
+
+  if(mode==='sell'){
+    // Remove shares FIFO
+    var target=shares,removed=0;
+    var sorted=group.lots.slice().sort(function(a,b){return a.shares-b.shares;});
+    sorted.forEach(function(lot){
+      if(removed>=target)return;
+      var canTake=Math.min(lot.shares,target-removed);
+      if(canTake===lot.shares){
+        lots=lots.filter(function(l){return l.id!==lot.id;});
+      } else {
+        var idx=lots.findIndex(function(l){return l.id===lot.id;});
+        if(idx>=0) lots[idx].shares-=canTake;
+      }
+      removed+=canTake;
+    });
+    var remaining=lots.filter(function(l){return l.ticker===ticker;});
+    if(remaining.length===0){delete tpPhase[ticker];if(expanded===ticker)expanded=null;}
+
+    var pnl=Math.round(shares*(price-entry)*100)/100;
+    window.tradeLog.unshift({
+      id:uid(),ticker:ticker,date:date,action:'SELL_CUSTOM',
+      shares:shares,price:price,entry:entry,
+      pnl:pnl,pct:Math.round((price-entry)/entry*10000)/100,
+      notes:notes||''
+    });
+    saveLots();saveTpPhase();store.set('sepa_trade_log',window.tradeLog);
+    renderAll();
+    toast('✅ '+ticker+' 自訂賣出 '+shares+'股 @ $'+f2(price,2)+' · '+(pnl>=0?'+':'')+money(pnl));
+
+  } else {
+    // Buy: add new lot inheriting current stop
+    var newLot={id:uid(),ticker:ticker,entry:price,shares:shares,
+      stop:group.avgStop,date:date,notes:notes?'[加碼] '+notes:'[加碼]'};
+    lots.unshift(newLot);
+    window.tradeLog.unshift({
+      id:uid(),ticker:ticker,date:date,action:'BUY_ADD',
+      shares:shares,price:price,entry:price,pnl:0,pct:0,notes:notes||''
+    });
+    saveLots();store.set('sepa_trade_log',window.tradeLog);
+    renderAll();
+    if(cfg.apiKey) fetchOne(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
+    toast('✅ '+ticker+' 加碼 '+shares+'股 @ $'+f2(price,2));
+  }
+}
+
+// Custom trade modal event wiring
+(function(){
+  var overlay=document.getElementById('ct-modal');
+  document.getElementById('ct-tab-sell').addEventListener('click',function(){setCtMode('sell');});
+  document.getElementById('ct-tab-buy').addEventListener('click',function(){setCtMode('buy');});
+  document.getElementById('ct-shares').addEventListener('input',updateCtPreview);
+  document.getElementById('ct-price').addEventListener('input',updateCtPreview);
+
+  document.getElementById('ct-confirm').addEventListener('click',function(){
+    var ticker=overlay.dataset.ticker;
+    var totalSh=parseInt(overlay.dataset.totalSh)||0;
+    var sh=parseInt(document.getElementById('ct-shares').value)||0;
+    var pr=parseFloat(document.getElementById('ct-price').value)||0;
+    var date=document.getElementById('ct-date').value||new Date().toISOString().slice(0,10);
+    var notes=document.getElementById('ct-notes').value.trim();
+    if(!ticker){toast('⚠️ 資料錯誤');return;}
+    if(sh<=0){toast('⚠️ 請輸入有效股數');return;}
+    if(pr<=0){toast('⚠️ 請輸入有效價格');return;}
+    if(ctMode==='sell'&&sh>totalSh){toast('⚠️ 超過現有持倉 '+totalSh+' 股');return;}
+    overlay.classList.remove('show');
+    executeCustomTrade(ticker,ctMode,sh,pr,date,notes);
+  });
+  document.getElementById('ct-cancel').addEventListener('click',function(){overlay.classList.remove('show');});
+  overlay.addEventListener('click',function(e){if(e.target===this)this.classList.remove('show');});
+}());
+
+
 // ── Full refresh ──────────────────────────────────
 function fullRefresh(){
   if(loading)return;
@@ -1675,6 +1920,8 @@ document.getElementById('pos-wrap').addEventListener('click', function(e){
       delete tpPhase[ticker];
       expanded=null; saveLots(); saveTpPhase(); renderAll();
       toast('🗑 '+ticker+' 所有部位已清除');
+    } else if(action==='custom-trade'){
+      openCustomTradeModal(ticker);
     }
     return;
   }
@@ -1746,35 +1993,87 @@ document.getElementById('btn-clear-all').addEventListener('click', function(){
   toast('🗑 所有持倉已清除');
 });
 
-// Export
+// Export — AI-friendly consolidated per-ticker format
 document.getElementById('btn-export').addEventListener('click', function(){
-  // 為每個 lot 加入 _tp（分批階段）和 _origShares（原始總股數）
   var tradeLog = window.tradeLog || store.get('sepa_trade_log') || [];
-  var enrichedLots = lots.map(function(lot){
-    var tp = tpPhase[lot.ticker] || 0;
-    // 原始股數 = 現有股數 + 已從 tradeLog 賣出的股數（同 ticker）
-    var soldShares = tradeLog
-      .filter(function(t){ return t.ticker === lot.ticker; })
-      .reduce(function(s,t){ return s + (t.shares||0); }, 0);
-    // 以 group 為單位計算原始股數（避免多 lot 重複加）
-    var groupLots = lots.filter(function(l){ return l.ticker === lot.ticker; });
-    var currentTotal = groupLots.reduce(function(s,l){ return s+l.shares; }, 0);
-    var origTotal = currentTotal + soldShares;
-    var phaseStr = tp === 0 ? '尚未執行分批'
-                 : tp === 1 ? 'T1已執行，剩餘持有'
-                 : tp === 2 ? 'T1+T2已執行，剩餘持有'
-                 : 'T1+T2+T3已執行，剩餘持有';
-    return Object.assign({}, lot, {
-      _tp: tp,
-      _origShares: origTotal,
-      _phaseStr: phaseStr
-    });
+  var groups = getGroups();
+  var today = new Date().toISOString().slice(0,10);
+
+  var actionLabel = function(a){
+    return a==='SELL_T1'?'T1止盈':a==='SELL_T2'?'T2止盈':a==='SELL_T3'?'T3止盈':
+           a==='SELL_CUSTOM'?'自訂賣出':a==='BUY_ADD'?'加碼買入':'平倉';
+  };
+  var phaseDesc = function(ph){
+    return ph===0?'尚未分批':ph===1?'T1已執行（已出⅓，停損移至成本+2%）':
+           ph===2?'T1+T2已執行（已出⅔，停損移至+20%）':'全數已出';
+  };
+
+  var positions = groups.map(function(g){
+    var ph = tpPhase[g.ticker]||0;
+    var tickerTrades = tradeLog.filter(function(t){return t.ticker===g.ticker;});
+    var soldShares = tickerTrades.filter(function(t){return t.action.indexOf('SELL')===0;})
+      .reduce(function(s,t){return s+(t.shares||0);},0);
+    var realizedPnl = tickerTrades.filter(function(t){return t.action.indexOf('SELL')===0;})
+      .reduce(function(s,t){return s+t.pnl;},0);
+    var pd = prices[g.ticker];
+    var cur = pd ? pd.price : null;
+    var unrealPnl = cur ? Math.round((cur-g.avgEntry)*g.totalShares*100)/100 : null;
+    var unrealPct = cur ? Math.round((cur-g.avgEntry)/g.avgEntry*10000)/100 : null;
+    var stopPct   = Math.round((g.avgEntry-g.avgStop)/g.avgEntry*1000)/10;
+
+    return {
+      ticker:            g.ticker,
+      entry_date:        g.firstDate,
+      avg_entry_price:   Math.round(g.avgEntry*100)/100,
+      stop_loss_price:   Math.round(g.avgStop*100)/100,
+      stop_loss_pct:     stopPct,
+      current_shares:    g.totalShares,
+      original_shares:   g.totalShares + soldShares,
+      tp_phase:          ph,
+      tp_phase_desc:     phaseDesc(ph),
+      current_price:     cur,
+      unrealized_pnl:    unrealPnl,
+      unrealized_pct:    unrealPct,
+      realized_pnl:      Math.round(realizedPnl*100)/100,
+      notes:             g.notes||null,
+      buy_lots: g.lots.map(function(l){
+        return {date:l.date, shares:l.shares, entry_price:l.entry,
+                stop_price:l.stop, notes:l.notes||null};
+      }),
+      trade_history: tickerTrades.map(function(t){
+        return {date:t.date, action:actionLabel(t.action),
+                shares:t.shares, price:t.price,
+                realized_pnl:t.pnl, pnl_pct:t.pct,
+                notes:t.notes||null};
+      })
+    };
   });
-  var posJson = JSON.stringify(enrichedLots, null, 2);
-  var tradeJson = JSON.stringify(tradeLog, null, 2);
-  var out = '=== POSITIONS_JSON (貼到 GitHub Secret) ===\n' + posJson
-    + '\n\n=== TRADE_HISTORY_JSON (貼到 GitHub Secret) ===\n' + tradeJson;
-  document.getElementById('modal-json').textContent = out;
+
+  var totalCost  = groups.reduce(function(s,g){return s+g.totalCost;},0);
+  var totalValue = groups.reduce(function(s,g){
+    var pd=prices[g.ticker]; return s+(pd?pd.price*g.totalShares:g.totalCost);
+  },0);
+  var totalRealized = tradeLog.filter(function(t){return t.action.indexOf('SELL')===0;})
+    .reduce(function(s,t){return s+t.pnl;},0);
+
+  var exportData = {
+    _meta: {
+      export_date: today,
+      note: 'AI可讀格式。positions 為每支股票整合後的持倉（非原始 lot 陣列）。tp_phase_desc 說明當前分批階段。trade_history 包含 T1/T2/T3止盈 和 自訂買賣 記錄。'
+    },
+    portfolio_summary: {
+      position_count:    groups.length,
+      capital:           cfg.capital,
+      total_cost:        Math.round(totalCost*100)/100,
+      total_market_value: Math.round(totalValue*100)/100,
+      deployment_pct:    cfg.capital>0?Math.round(totalCost/cfg.capital*1000)/10:0,
+      unrealized_pnl:    Math.round((totalValue-totalCost)*100)/100,
+      total_realized_pnl: Math.round(totalRealized*100)/100
+    },
+    positions: positions
+  };
+
+  document.getElementById('modal-json').textContent = JSON.stringify(exportData, null, 2);
   document.getElementById('modal').classList.add('show');
 });
 document.getElementById('btn-mclose').addEventListener('click', function(){ document.getElementById('modal').classList.remove('show'); });
