@@ -865,7 +865,7 @@ function fetchOne(ticker){
 // ── Yahoo v7 批次即時報價（無需 API key）────────────
 function _fetchBatchYahoo(tickers){
   var fields='regularMarketPrice,regularMarketPreviousClose,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen';
-  var syms=tickers.map(encodeURIComponent).join('%2C');
+  var syms=tickers.join(',');
   function tryBase(base){
     return fetch(base+'?symbols='+syms+'&fields='+fields,{cache:'no-store'})
       .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
