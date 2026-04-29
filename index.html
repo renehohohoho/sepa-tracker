@@ -724,7 +724,7 @@ var tpPhase = store.get('sepa_tp_phase') || {}; // ticker → 0/1/2/3
 var expanded = null;
 var loading  = false;
 var stopMode = 'price';
-window.tradeLog = store.get('sepa_trade_log') || [];
+var tradeLog = store.get('sepa_trade_log') || [];
 lots = lots.filter(function(lot){
   return lot && isValidTicker(String(lot.ticker||'')) &&
     Number(lot.entry)>0 && Number(lot.shares)>0 && Number(lot.stop)>0;
@@ -744,7 +744,7 @@ var marketState = { spyAbove200: null, spyPrice: null, spyMA200: null, lastCheck
 
 function fetchMarketState(cb){
   // 每 30 分鐘重新抓一次
-  if(marketState.spyAbove200 !== null && Date.now() - marketState.lastCheck < 1800000){
+  if(marketState.lastCheck > 0 && Date.now() - marketState.lastCheck < 1800000){
     cb && cb(); return;
   }
   var to = Math.floor(Date.now()/1000);
@@ -776,7 +776,7 @@ function fetchMarketState(cb){
       return tryFetch('https://corsproxy.io/?'+encodeURIComponent(url))
         .then(function(d){ return parseSPY(d.contents?JSON.parse(d.contents):d); });
     })
-    .catch(function(){ marketState.spyAbove200 = true; /* fallback: 不阻擋 */ })
+    .catch(function(){ marketState.lastCheck = Date.now(); })
     .finally(function(){ cb && cb(); });
 }
 // 若 tradeLog 為空且是首次載入，可從此處預填歷史記錄
@@ -851,7 +851,7 @@ function updateMkt(){
 }
 updateMkt(); setInterval(updateMkt,30000);
 
-// ── Finnhub fetch ─────────────────────────────────
+// ── Finnhub fetch（單支，需 API key）────────────────
 function fetchOne(ticker){
   if(!cfg.apiKey) return Promise.reject(new Error('missing api key'));
   return fetch('https://finnhub.io/api/v1/quote?symbol='+encodeURIComponent(ticker)+'&token='+cfg.apiKey)
@@ -861,25 +861,64 @@ function fetchOne(ticker){
       return { price:d.c, prevClose:d.pc, change1d:d.c&&d.pc?(d.c-d.pc)/d.pc*100:0, high:d.h, low:d.l, open:d.o };
     });
 }
+
+// ── Yahoo v7 批次即時報價（無需 API key）────────────
+function _fetchBatchYahoo(tickers){
+  var fields='regularMarketPrice,regularMarketPreviousClose,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen';
+  var syms=tickers.map(encodeURIComponent).join('%2C');
+  function tryBase(base){
+    return fetch(base+'?symbols='+syms+'&fields='+fields,{cache:'no-store'})
+      .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+      .then(function(d){
+        var results=(d&&d.quoteResponse&&d.quoteResponse.result)||[];
+        var map={};
+        results.forEach(function(q){
+          var c=q.regularMarketPrice;
+          var pc=q.regularMarketPreviousClose||c;
+          if(c) map[q.symbol]={
+            price:c, prevClose:pc,
+            change1d:pc?(c-pc)/pc*100:0,
+            high:q.regularMarketDayHigh||c,
+            low:q.regularMarketDayLow||c,
+            open:q.regularMarketOpen||c
+          };
+        });
+        return map;
+      });
+  }
+  return tryBase('https://query2.finance.yahoo.com/v7/finance/quote')
+    .catch(function(){ return tryBase('https://query1.finance.yahoo.com/v7/finance/quote'); });
+}
+
 function fetchAll(cb){
   var groups=getGroups();
   var tickers=groups.map(function(g){ return g.ticker; });
   if(!tickers.length){ cb&&cb(); return; }
-  var done=0;
-  tickers.forEach(function(t,i){
-    setTimeout(function(){
-      fetchOne(t)
-        .then(function(d){ prices[t]=d; })
-        .catch(function(){ })
-        .finally(function(){
-          done++;
-          if(done===tickers.length){
-            document.getElementById('last-upd').textContent='最後更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
-            cb&&cb();
-          }
-        });
-    }, i*150);
-  });
+
+  function finish(){
+    document.getElementById('last-upd').textContent='最後更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+    cb&&cb();
+  }
+
+  function finnhubFallback(pending){
+    if(!cfg.apiKey||!pending.length){ finish(); return; }
+    var done=0;
+    pending.forEach(function(t,i){
+      setTimeout(function(){
+        fetchOne(t).then(function(d){ prices[t]=d; }).catch(function(){})
+          .finally(function(){ if(++done===pending.length) finish(); });
+      }, i*150);
+    });
+  }
+
+  _fetchBatchYahoo(tickers)
+    .then(function(map){
+      tickers.forEach(function(t){ if(map[t]) prices[t]=map[t]; });
+      var missing=tickers.filter(function(t){ return !map[t]; });
+      if(!missing.length) finish();
+      else finnhubFallback(missing);
+    })
+    .catch(function(){ finnhubFallback(tickers); });
 }
 
 // ══════════════════════════════════════════════════
@@ -974,17 +1013,13 @@ function fetchOHLCV(ticker){
         .then(function(d){return parseYahooOHLCV(d);});
     },
     function(){
-      return viaProxy('https://corsproxy.io/?'+encodeURIComponent(directUrl));
-    },
-    function(){
-      return viaProxy('https://api.allorigins.win/get?url='+encodeURIComponent(directUrl));
-    },
-    function(){
       var u1='https://query1.finance.yahoo.com/v8/finance/chart/'+sym+qs;
-      return viaProxy('https://corsproxy.io/?'+encodeURIComponent(u1));
+      return fetchWithTimeout(u1,6000)
+        .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
+        .then(function(d){return parseYahooOHLCV(d);});
     },
     function(){
-      return viaProxy('https://api.allorigins.win/get?url='+encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/'+sym+qs));
+      return viaProxy('https://corsproxy.io/?'+encodeURIComponent(directUrl));
     }
   ];
 
@@ -1038,7 +1073,8 @@ function buildVcpStrip(ticker){
   return html+'</div>';
 }
 
-function buildVcpPanel(ticker){
+function buildVcpPanel(g){
+  var ticker=g.ticker;
   var vcp=vcpData[ticker];
   if(!vcp||vcp.status==='insufficient'||vcp.status==='error') return '';
   var stage=vcp.stage,isBuy=stage===5;
@@ -1095,9 +1131,8 @@ function buildVcpPanel(ticker){
 
   // ── 移動停損建議（基於 MA）──────────────────────────
   if(vcp.ma50 && vcp.lastClose){
-    var grp=getGroups().find(function(g){return g.ticker===ticker;});
-    if(grp){
-      var entry=grp.avgEntry, curStop=grp.avgStop, cur=vcp.lastClose;
+    {
+      var entry=g.avgEntry, curStop=g.avgStop, cur=vcp.lastClose;
       var pp=(cur-entry)/entry*100;
       var ma50=vcp.ma50, ma150=vcp.ma150||0;
       var suggestions=[];
@@ -1271,7 +1306,7 @@ function renderStats(){
     if(posVal>maxPos) maxPos=posVal;
   });
   var pnl=tv-tc,dep=cfg.capital>0?tc/cfg.capital*100:0;
-  var realized=(window.tradeLog||[]).reduce(function(s,t){return s+t.pnl;},0);
+  var realized=(tradeLog||[]).reduce(function(s,t){return s+t.pnl;},0);
   var totalReturn=pnl+realized;
   var pe=document.getElementById('s-pnl');
   pe.textContent=n?(money(pnl)+(realized?(' + '+money(realized)+' 實現'):'')):'—';
@@ -1379,7 +1414,7 @@ function renderCard(card, g){
     lotsHtml+='</div>';
 
     // Sell history for this ticker
-    var allTrades=(window.tradeLog||store.get('sepa_trade_log')||[]).filter(function(t){return t.ticker===g.ticker;});
+    var allTrades=(tradeLog||store.get('sepa_trade_log')||[]).filter(function(t){return t.ticker===g.ticker;});
     if(allTrades.length){
       var sellTrades=allTrades.filter(function(t){return t.action!=='BUY_ADD';});
       var buyTrades=allTrades.filter(function(t){return t.action==='BUY_ADD';});
@@ -1424,11 +1459,11 @@ function renderCard(card, g){
 
     if(cur && pd){
       var a=buildAnalysis(g,pd);
-      detailHtml=buildVcpPanel(g.ticker)+buildTPPlan(g,cur)+lotsHtml
+      detailHtml=buildVcpPanel(g)+buildTPPlan(g,cur)+lotsHtml
         +'<div class="detail-grid">'
         +dcc('合計市值',money(pv),'var(--text)')+dcc('加權成本',money(g.totalCost),'var(--muted)')
         +dcc('未實現損益',money(pu||0),pcol(pu||0))
-        +(function(){var tlog=(window.tradeLog||[]).filter(function(t){return t.ticker===g.ticker;});var r=tlog.reduce(function(s,t){return s+t.pnl;},0);return tlog.length?dcc('已實現損益',money(r),pcol(r)):'';}())
+        +(function(){var tlog=(tradeLog||[]).filter(function(t){return t.ticker===g.ticker;});var r=tlog.reduce(function(s,t){return s+t.pnl;},0);return tlog.length?dcc('已實現損益',money(r),pcol(r)):'';}())
         +dcc('最大虧損',money(-a.ml),'var(--red)')+dcc('距均停損',f2(a.sg,1)+'%',a.sg<3?'var(--amber)':'var(--text)')
         +dcc('持倉天數',a.days+'天','var(--text)')
         +'</div>'
@@ -1456,7 +1491,7 @@ function renderCard(card, g){
         +'<div class="rationale">'+a.rationale+'</div>'
         +'</div>';
     } else {
-      detailHtml=buildVcpPanel(g.ticker)+buildTPPlan(g,null)+lotsHtml+'<div style="padding:10px;font-family:var(--mono);font-size:12px;color:var(--muted)">⏳ 點右上角「更新」載入報價</div>';
+      detailHtml=buildVcpPanel(g)+buildTPPlan(g,null)+lotsHtml+'<div style="padding:10px;font-family:var(--mono);font-size:12px;color:var(--muted)">⏳ 點右上角「更新」載入報價</div>';
     }
     if(g.notes) detailHtml+='<div class="pos-notes">📝 '+esc(g.notes)+'</div>';
     detailHtml+='<div class="detail-actions">'
@@ -1612,10 +1647,10 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
   if(!group){ toast('⚠️ 找不到持倉 '+ticker); return; }
   var entry=group.avgEntry;
 
-  // Remove sellShares from lots (smallest lots first)
+  // Remove sellShares from lots (oldest first / FIFO)
   var target=sellShares;
   var removed=0;
-  var sorted=group.lots.slice().sort(function(a,b){return a.shares-b.shares;});
+  var sorted=group.lots.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
   sorted.forEach(function(lot){
     if(removed>=target) return;
     var canTake=Math.min(lot.shares, target-removed);
@@ -1643,8 +1678,7 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
   }
 
   // Log the trade
-  window.tradeLog=window.tradeLog||store.get('sepa_trade_log')||[];
-  window.tradeLog.unshift({
+  tradeLog.unshift({
     id:uid(), ticker:ticker,
     date:new Date().toISOString().slice(0,10),
     action:'SELL_T'+phase,
@@ -1653,7 +1687,7 @@ function executeTpAction(ticker, phase, sellShares, sellPrice){
     pnl:Math.round(sellShares*(sellPrice-entry)*100)/100,
     pct:Math.round((sellPrice-entry)/entry*10000)/100
   });
-  store.set('sepa_trade_log', window.tradeLog);
+  store.set('sepa_trade_log', tradeLog);
 
   saveLots();
   saveTpPhase();
@@ -1733,12 +1767,11 @@ function executeCustomTrade(ticker,mode,shares,price,date,notes){
   var group=getGroups().find(function(g){return g.ticker===ticker;});
   if(!group){toast('⚠️ 找不到持倉 '+ticker);return;}
   var entry=group.avgEntry;
-  window.tradeLog=window.tradeLog||store.get('sepa_trade_log')||[];
 
   if(mode==='sell'){
-    // Remove shares FIFO
+    // Remove shares FIFO (oldest first)
     var target=shares,removed=0;
-    var sorted=group.lots.slice().sort(function(a,b){return a.shares-b.shares;});
+    var sorted=group.lots.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
     sorted.forEach(function(lot){
       if(removed>=target)return;
       var canTake=Math.min(lot.shares,target-removed);
@@ -1754,13 +1787,13 @@ function executeCustomTrade(ticker,mode,shares,price,date,notes){
     if(remaining.length===0){delete tpPhase[ticker];if(expanded===ticker)expanded=null;}
 
     var pnl=Math.round(shares*(price-entry)*100)/100;
-    window.tradeLog.unshift({
+    tradeLog.unshift({
       id:uid(),ticker:ticker,date:date,action:'SELL_CUSTOM',
       shares:shares,price:price,entry:entry,
       pnl:pnl,pct:Math.round((price-entry)/entry*10000)/100,
       notes:notes||''
     });
-    saveLots();saveTpPhase();store.set('sepa_trade_log',window.tradeLog);
+    saveLots();saveTpPhase();store.set('sepa_trade_log',tradeLog);
     renderAll();
     toast('✅ '+ticker+' 自訂賣出 '+shares+'股 @ $'+f2(price,2)+' · '+(pnl>=0?'+':'')+money(pnl));
 
@@ -1769,11 +1802,11 @@ function executeCustomTrade(ticker,mode,shares,price,date,notes){
     var newLot={id:uid(),ticker:ticker,entry:price,shares:shares,
       stop:group.avgStop,date:date,notes:notes?'[加碼] '+notes:'[加碼]'};
     lots.unshift(newLot);
-    window.tradeLog.unshift({
+    tradeLog.unshift({
       id:uid(),ticker:ticker,date:date,action:'BUY_ADD',
       shares:shares,price:price,entry:price,pnl:0,pct:0,notes:notes||''
     });
-    saveLots();store.set('sepa_trade_log',window.tradeLog);
+    saveLots();store.set('sepa_trade_log',tradeLog);
     renderAll();
     if(cfg.apiKey) fetchOne(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
     toast('✅ '+ticker+' 加碼 '+shares+'股 @ $'+f2(price,2));
@@ -1904,9 +1937,9 @@ document.getElementById('pos-wrap').addEventListener('click', function(e){
   var tradeDel=el.closest('[data-trade-id]');
   if(tradeDel){
     var tradeId=tradeDel.getAttribute('data-trade-id');
-    if(!window.tradeLog) window.tradeLog=store.get('sepa_trade_log')||[];
-    window.tradeLog=window.tradeLog.filter(function(t){return t.id!==tradeId;});
-    store.set('sepa_trade_log', window.tradeLog);
+    if(!tradeLog) tradeLog=store.get('sepa_trade_log')||[];
+    tradeLog=tradeLog.filter(function(t){return t.id!==tradeId;});
+    store.set('sepa_trade_log', tradeLog);
     renderAll();
     toast('🗑 已刪除賣出記錄');
     return;
@@ -1995,7 +2028,7 @@ document.getElementById('btn-clear-all').addEventListener('click', function(){
 
 // Export — AI-friendly consolidated per-ticker format
 document.getElementById('btn-export').addEventListener('click', function(){
-  var tradeLog = window.tradeLog || store.get('sepa_trade_log') || [];
+  // tradeLog is the closure variable
   var groups = getGroups();
   var today = new Date().toISOString().slice(0,10);
 
