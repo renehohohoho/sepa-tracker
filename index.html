@@ -2139,6 +2139,39 @@ document.getElementById('btn-copy').addEventListener('click', function(){
   }
 });
 
+// ── One-time data patch: import April 2026 missing trades ────────────────
+(function(){
+  if(store.get('sepa_patched_v1')) return;
+
+  // Remove MU 2026-04-06 lot (sold 4/17, lot was never removed)
+  lots=lots.filter(function(l){
+    return !(l.ticker==='MU'&&l.date==='2026-04-06'&&Math.abs(l.entry-382.30)<0.01);
+  });
+  // Remove WDC lots (sold 4/17, position closed)
+  lots=lots.filter(function(l){ return l.ticker!=='WDC'; });
+  delete tpPhase['WDC'];
+  store.set('sepa_positions',lots);
+  store.set('sepa_tp_phase',tpPhase);
+
+  // Add missing sell records (skip if already present by ticker+date+price)
+  function hasTrade(t,d,p){ return tradeLog.some(function(r){ return r.ticker===t&&r.date===d&&Math.abs(r.price-p)<0.01; }); }
+  function sell(t,d,sh,pr,en){
+    if(hasTrade(t,d,pr)) return;
+    tradeLog.unshift({id:uid(),ticker:t,date:d,action:'SELL_CUSTOM',shares:sh,price:pr,entry:en,
+      pnl:Math.round(sh*(pr-en)*100)/100,pct:Math.round((pr-en)/en*10000)/100,notes:''});
+  }
+  sell('WDC', '2026-04-17', 2, 365.77,   304.81);   // +$122
+  sell('MRVL','2026-04-10', 6, 125.00,   109.00);    // +$96
+  sell('MRVL','2026-04-21', 6, 152.60,   109.00);    // +$262
+  sell('MRVL','2026-04-24', 3, 174.10,   109.00);    // +$195
+  sell('MRVL','2026-04-27', 3, 152.6712, 109.00);    // +$131
+  sell('SITM','2026-04-23', 3, 526.00,   523.76);    // +$7
+  sell('TER', '2026-04-29',10, 333.00,   357.335);   // -$243
+
+  store.set('sepa_trade_log',tradeLog);
+  store.set('sepa_patched_v1','1');
+}());
+
 // ── Init ──────────────────────────────────────────
 document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
 setStopMode('pct');
