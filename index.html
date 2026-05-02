@@ -134,7 +134,8 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 .pos-pnl-pct{font-family:var(--mono);font-size:12px}
 .pos-bar-track{height:3px;background:var(--dim);border-radius:3px;overflow:hidden;margin-bottom:6px}
 .pos-bar-fill{height:3px;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
-.pos-meta{display:flex;gap:10px;flex-wrap:wrap}
+.pos-meta{display:none;gap:10px;flex-wrap:wrap}
+.pos-card.expanded .pos-meta{display:flex}
 .pos-meta-item{font-family:var(--mono);font-size:10px;color:var(--muted)}
 .pos-meta-item span{color:var(--text)}
 .pos-right{text-align:right}
@@ -158,6 +159,9 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 /* ── VCP STRIP ─────────────────────────────────── */
 .vcp-strip{display:flex;align-items:center;gap:8px;padding:7px 13px 8px;
   border-top:1px solid var(--bdr);background:rgba(0,240,138,.02);flex-wrap:wrap}
+.vcp-strip-compact{display:flex;align-items:center;gap:8px;padding:5px 13px;
+  border-top:1px solid var(--bdr);flex-wrap:wrap}
+.vcp-badge{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;flex-shrink:0}
 .vcp-lbl{font-family:var(--mono);font-size:9px;font-weight:500;color:#00d488;
   text-transform:uppercase;letter-spacing:.12em;flex-shrink:0}
 .vcp-stages{display:flex;align-items:center;gap:3px;flex:1;flex-wrap:wrap}
@@ -1061,25 +1065,21 @@ function fetchVCPAll(cb){
 // ── VCP HTML builders ──────────────────────────────
 function buildVcpStrip(ticker){
   var vcp=vcpData[ticker];
-  var html='<div class="vcp-strip"><span class="vcp-lbl">VCP</span>';
-  if(!vcp) return html+'<span class="vcp-loading">分析中…</span></div>';
-  if(vcp.status==='insufficient'||vcp.status==='error')
-    return html+'<span class="vcp-loading">'+(vcp.status==='error'?'無法取得資料':'資料不足')+'</span></div>';
-  var stage=vcp.stage,names=['大跌','小跌','更小跌','橫盤','突破'];
-  html+='<div class="vcp-stages">';
-  for(var i=0;i<5;i++){
-    var cls=stage===5?'done':(i<stage-1?'done':(i===stage-1?'curr':'pend'));
-    html+='<span class="vcp-dot '+cls+'"></span><span class="vcp-stxt '+cls+'">'+names[i]+'</span>';
-    if(i<4) html+='<span class="vcp-arr">›</span>';
-  }
-  html+='</div>';
+  var sCols=['var(--muted)','var(--red)','var(--amber)','var(--amber)','#00d4b0','var(--green)'];
+  var sNames=['—','大跌段','小跌段','更小跌','橫盤整理','突破!'];
+  if(!vcp) return '<div class="vcp-strip-compact"><span class="vcp-badge" style="color:var(--muted)">VCP</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">分析中…</span></div>';
+  if(vcp.status==='insufficient'||vcp.status==='error') return '';
+  var stage=vcp.stage,col=sCols[Math.min(stage,5)];
+  var html='<div class="vcp-strip-compact"><span class="vcp-badge" style="color:'+col+'">VCP</span>';
   if(stage===5){
-    html+='<span class="vcp-buy">🎯 建議買進</span>'
+    html+='<span class="vcp-buy">🎯 買進</span>'
       +'<span class="vcp-zone">$'+vcp.buyLow.toFixed(2)+'–$'+vcp.buyHigh.toFixed(2)+'</span>';
-  } else if(stage>=4){
-    html+='<span class="vcp-wait">⏳ 等待突破+量能≥1.5x</span>';
+  } else if(stage===4){
+    html+='<span style="font-family:var(--mono);font-size:10px;color:#00d4b0">⏳ 等突破 $'+vcp.rHi.toFixed(2)+'</span>';
   } else if(stage>0){
-    html+='<span class="vcp-wait" style="color:var(--muted)">第 '+stage+'/5 階段</span>';
+    html+='<span style="font-family:var(--mono);font-size:10px;color:'+col+'">'+stage+'/5 '+sNames[stage]+'</span>';
+  } else {
+    html+='<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">尚未形成</span>';
   }
   return html+'</div>';
 }
@@ -1523,19 +1523,17 @@ function renderCard(card, g){
       +'</div>';
   }
 
-  // Phase tag for collapsed card view
-  var phTag=(function(){
+  var phInline=(function(){
     var ph=tpPhase[g.ticker]||0;
     if(!ph) return '';
-    var labels=['','T1 ✓ → T2','T2 ✓ → T3','已清倉'];
-    return '<div class="tp-phase-tag">'+labels[Math.min(ph,3)]+'</div>';
+    var labels=['','T1✓','T2✓','清倉'];
+    return '<span style="color:var(--grn2);font-size:9px;margin-left:5px;font-family:var(--mono)">'+labels[Math.min(ph,3)]+'</span>';
   }());
 
   card.innerHTML=(
     '<div class="pos-main" data-toggle="'+tickerAttr+'">'
     +'<div><div class="pos-ticker">'+tickerHtml+'</div>'
-    +'<div class="pos-lots">'+(nlots>1?nlots+' 筆 · ':'')+g.totalShares+' 股</div>'
-    +phTag
+    +'<div class="pos-lots">'+(nlots>1?nlots+' 筆 · ':'')+g.totalShares+' 股'+phInline+'</div>'
     +'<div class="sig-badge '+bkey+'">'+bicon+' '+blabel+'</div></div>'
     +'<div class="pos-middle">'
     +'<div class="pos-pnl-row">'+pnlHtml+'</div>'
