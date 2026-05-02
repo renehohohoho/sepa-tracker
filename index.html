@@ -1319,9 +1319,13 @@ function renderStats(){
   });
   var pnl=tv-tc,dep=cfg.capital>0?tc/cfg.capital*100:0;
   var realized=(tradeLog||[]).reduce(function(s,t){return s+t.pnl;},0);
+  var realizedCost=(tradeLog||[]).filter(function(t){return t.action&&t.action.indexOf('SELL')===0;})
+    .reduce(function(s,t){return s+(t.shares||0)*(t.entry||0);},0);
+  var realizedPct=realizedCost>0?realized/realizedCost*100:0;
   var totalReturn=pnl+realized;
   var pe=document.getElementById('s-pnl');
-  pe.textContent=n?(money(pnl)+(realized?(' + '+money(realized)+' 實現'):'')):'—';
+  var realizedStr=realized?(money(realized)+(realizedCost>0?' ('+ppct(realizedPct)+')':'')+' 實現'):'';
+  pe.textContent=n?(money(pnl)+(realizedStr?' + '+realizedStr:'')):'—';
   pe.style.color=n?pcol(totalReturn):'var(--muted)';
   document.getElementById('s-val').textContent=n?money(tv):'—';
   document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
