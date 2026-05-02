@@ -1324,9 +1324,16 @@ function renderStats(){
   var realizedPct=realizedCost>0?realized/realizedCost*100:0;
   var totalReturn=pnl+realized;
   var pe=document.getElementById('s-pnl');
-  var realizedStr=realized?(money(realized)+(realizedCost>0?' ('+ppct(realizedPct)+')':'')+' 實現'):'';
-  pe.textContent=n?(money(pnl)+(realizedStr?' + '+realizedStr:'')):'—';
-  pe.style.color=n?pcol(totalReturn):'var(--muted)';
+  if(!n){ pe.innerHTML='—'; pe.style.color='var(--muted)'; }
+  else if(realized){
+    pe.innerHTML='<span style="color:'+pcol(pnl)+'">'+money(pnl)+'</span>'
+      +'<div style="font-size:11px;font-family:var(--mono);margin-top:3px;color:'+pcol(realized)+'">'
+      +money(realized)+(realizedCost>0?' ('+ppct(realizedPct)+')':'')+' 實現</div>';
+    pe.style.color='';
+  } else {
+    pe.textContent=money(pnl);
+    pe.style.color=pcol(pnl);
+  }
   document.getElementById('s-val').textContent=n?money(tv):'—';
   document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
   document.getElementById('s-loss').textContent=n?money(-ml):'—';
