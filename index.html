@@ -739,6 +739,17 @@ lots = lots.filter(function(lot){
   });
 });
 
+// Clean up any tpPhase entries for tickers that no longer have lots
+(function(){
+  var changed=false;
+  Object.keys(tpPhase).forEach(function(ticker){
+    if(!lots.find(function(l){return l.ticker===ticker;})){
+      delete tpPhase[ticker]; changed=true;
+    }
+  });
+  if(changed) store.set('sepa_tp_phase', tpPhase);
+}());
+
 // ── 大盤狀態（SPY MA200）────────────────────────────
 var marketState = { spyAbove200: null, spyPrice: null, spyMA200: null, lastCheck: 0 };
 
@@ -1904,7 +1915,10 @@ function addLot(){
     if(stop>=entry){ toast('⚠️ 停損價必須低於進場價'); return; }
   }
   var lot={id:uid(),ticker:ticker,entry:entry,shares:shares,stop:parseFloat(f2(stop,2)),date:date||new Date().toISOString().slice(0,10),notes:notes};
-  lots.unshift(lot); saveLots();
+  var isNewPosition=!lots.find(function(l){return l.ticker===ticker;});
+  lots.unshift(lot);
+  if(isNewPosition){ delete tpPhase[ticker]; saveTpPhase(); }
+  saveLots();
   ['f-ticker','f-entry','f-shares','f-stop','f-notes'].forEach(function(id){ document.getElementById(id).value=''; });
   document.getElementById('stop-hint').textContent='';
   expanded=ticker;
@@ -1926,8 +1940,9 @@ document.getElementById('pos-wrap').addEventListener('click', function(e){
     var lot=lots.find(function(l){return l.id===lotId;});
     if(!lot)return;
     lots=lots.filter(function(l){return l.id!==lotId;});
+    var noRemaining=!lots.find(function(l){return l.ticker===ticker;});
+    if(noRemaining){ delete tpPhase[ticker]; saveTpPhase(); expanded=null; }
     saveLots();
-    if(!lots.find(function(l){return l.ticker===ticker;})) expanded=null;
     renderAll();
     toast('🗑 已刪除 '+ticker+' '+lot.date+' 的交易');
     return;
