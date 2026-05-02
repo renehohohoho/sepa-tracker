@@ -1112,8 +1112,8 @@ function buildVcpPanel(g){
   html+='<div class="vcp-panel-title">🔬 VCP 型態分析 <span style="color:'+sc+'">'+sNames[Math.min(stage,5)]+'</span></div>';
   html+='<div class="vcp-dgrid">';
   html+=vdcc('Q1 跌幅（大跌）',vcp.q1.toFixed(1)+'%',vcp.q1>=12?'var(--grn2)':'var(--muted)');
-  html+=vdcc('Q2 跌幅（小跌）',vcp.q2.toFixed(1)+'%',(vcp.q2<vcp.q1&&vcp.q2>=5)?'var(--grn2)':'var(--muted)');
-  html+=vdcc('Q3 跌幅（更小）',vcp.q3.toFixed(1)+'%',(vcp.q3<vcp.q2&&vcp.q3>=2)?'var(--grn2)':'var(--muted)');
+  html+=vdcc('Q2 跌幅（'+(vcp.q2<vcp.q1?'小跌':'↑未收縮')+'）',vcp.q2.toFixed(1)+'%',(vcp.q2<vcp.q1&&vcp.q2>=5)?'var(--grn2)':vcp.q2>=vcp.q1?'var(--amber)':'var(--muted)');
+  html+=vdcc('Q3 跌幅（'+(vcp.q3<vcp.q2?'更小跌':'↑未收縮')+'）',vcp.q3.toFixed(1)+'%',(vcp.q3<vcp.q2&&vcp.q3>=2)?'var(--grn2)':vcp.q3>=vcp.q2?'var(--amber)':'var(--muted)');
   html+=vdcc('橫盤10根波動',vcp.t10.toFixed(1)+'%',vcp.t10<=4.5?'var(--grn2)':'var(--muted)');
   html+=vdcc('量能比（/均20）',vcp.volR.toFixed(2)+'x',vcp.volR>=1.5?'var(--green)':'var(--muted)');
   html+=vdcc('突破前高',vcp.isBrk?'✅ 是':'❌ 否',vcp.isBrk?'var(--green)':'var(--muted)');
@@ -1214,11 +1214,12 @@ function buildTPPlan(g, cur){
   var maxLoss=Math.abs(Math.round((entry-stop)*shares)); // stop may be above entry after T1 move
   if(shares<=0) return '';
   var pp=cur?(cur-entry)/entry*100:0;
+  var _t1sh=Math.ceil(shares/3), _t2sh=Math.ceil(shares/3);
   var tiers=[
-    {num:'T1',pct:.20,sh:Math.ceil(shares/3), label:'第一止盈',col:'var(--amber)',cls:'t1',action:'出 ⅓，停損移至成本+2%'},
-    {num:'T2',pct:.40,sh:Math.ceil(shares/3), label:'中段獲利',col:'var(--grn2)', cls:'t2',action:'再出 ⅓，停損移至+20%'},
-    {num:'T3',pct:.60,sh:Math.floor(shares/3),label:'主力目標',col:'var(--green)',cls:'t3',action:'剩餘出場或跟進停損'},
-    {num:'T4',pct:1.00,sh:shares,             label:'超級績效',col:'var(--purp)', cls:'t4',action:'強勢特例，緊跟支撐'},
+    {num:'T1',pct:.20,sh:_t1sh,                                  label:'第一止盈',col:'var(--amber)',cls:'t1',action:'出 ⅓，停損移至成本+2%'},
+    {num:'T2',pct:.40,sh:_t2sh,                                  label:'中段獲利',col:'var(--grn2)', cls:'t2',action:'再出 ⅓，停損移至+20%'},
+    {num:'T3',pct:.60,sh:Math.max(1,shares-_t1sh-_t2sh),         label:'主力目標',col:'var(--green)',cls:'t3',action:'剩餘出場或跟進停損'},
+    {num:'T4',pct:1.00,sh:shares,                                 label:'超級績效',col:'var(--purp)', cls:'t4',action:'強勢特例，緊跟支撐'},
   ];
   var html='<div class="tp-plan"><div class="tp-plan-title">🎯 止盈計劃</div><div class="tp-rows">';
   var nextTier=null;
