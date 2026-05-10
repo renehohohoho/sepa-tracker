@@ -1305,6 +1305,57 @@ function buildTPPlan(g, cur){
   return html;
 }
 
+// ── Price Ladder Bar ─────────────────────────────
+function buildLadderBar(g, cur){
+  var entry=g.avgEntry, stop=g.avgStop;
+  if(!stop||stop<=0||!entry||entry<=0) return '';
+
+  var t1=Math.round(entry*1.20*100)/100;
+  var t2=Math.round(entry*1.40*100)/100;
+  var t3=Math.round(entry*1.60*100)/100;
+
+  var pad=(t3-stop)*0.04;
+  var lo=stop-pad, hi=t3+pad, span=hi-lo;
+
+  function seg(a,b,rgba){
+    return '<div style="flex:none;width:'+Math.max(0,(b-a)/span*100).toFixed(2)+'%;background:'+rgba+'"></div>';
+  }
+  function xp(p){ return Math.max(0,Math.min(100,(p-lo)/span*100)).toFixed(2); }
+
+  var cp=cur?parseFloat(xp(cur)):null;
+  var cc=!cur?'var(--muted)':cur<=stop?'var(--red)':cur<entry?'#ff7090':
+         cur<t1?'var(--blue)':cur<t2?'var(--grn2)':cur<t3?'var(--green)':'var(--purp)';
+
+  var curLbl=(cp!==null&&cur)
+    ?'<div style="position:absolute;left:'+cp+'%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;font-weight:700;color:'+cc+';white-space:nowrap">$'+f2(cur)+'</div>'
+    :'';
+
+  var marker=(cp!==null)
+    ?'<div style="position:absolute;top:-4px;left:'+cp+'%;transform:translateX(-50%);width:2px;height:15px;background:'+cc+';border-radius:1px;box-shadow:0 0 5px '+cc+'60"></div>'
+    :'';
+
+  return '<div style="padding:5px 13px 7px;border-top:1px solid var(--bdr)">'
+    +'<div style="position:relative">'
+    +'<div style="height:11px;position:relative">'+curLbl+'</div>'
+    +'<div style="position:relative">'
+    +'<div style="display:flex;height:7px;border-radius:3px;overflow:hidden">'
+    +seg(lo,stop,  'rgba(255,61,90,0.18)')
+    +seg(stop,entry,'rgba(255,61,90,0.52)')
+    +seg(entry,t1,  'rgba(77,159,255,0.45)')
+    +seg(t1,t2,     'rgba(0,184,101,0.50)')
+    +seg(t2,t3,     'rgba(176,122,255,0.55)')
+    +seg(t3,hi,     'rgba(255,255,255,0.06)')
+    +'</div>'+marker+'</div>'
+    +'<div style="position:relative;height:13px;margin-top:3px">'
+    +'<div style="position:absolute;left:'+xp(stop)+'%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;color:var(--red);white-space:nowrap">停</div>'
+    +'<div style="position:absolute;left:'+xp(entry)+'%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;color:var(--muted);white-space:nowrap">入</div>'
+    +'<div style="position:absolute;left:'+xp(t1)+'%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;color:var(--amber);white-space:nowrap">T1</div>'
+    +'<div style="position:absolute;left:'+xp(t2)+'%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;color:var(--grn2);white-space:nowrap">T2</div>'
+    +'<div style="position:absolute;left:'+xp(t3)+'%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;color:var(--green);white-space:nowrap">T3</div>'
+    +'</div>'
+    +'</div></div>';
+}
+
 // ── Render ────────────────────────────────────────
 function renderAll(){ renderStats(); renderPositions(); }
 
@@ -1549,6 +1600,7 @@ function renderCard(card, g){
     +'</div></div>'
     // VCP strip — always visible on every card
     +buildVcpStrip(g.ticker)
+    +buildLadderBar(g, cur)
     +'<div class="pos-detail">'+detailHtml+'</div>'
   );
 }
