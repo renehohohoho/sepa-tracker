@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SEPA 持倉">
-<title>SEPA 持倉管理 v5.0</title>
+<title>SEPA 持倉管理 v5.1</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -400,7 +400,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 <!-- Cache buster: forces iOS Safari to reload from network, not disk cache -->
 <script>
 (function(){
-  var VER='4.2';
+  var VER='4.3';
   var stored=sessionStorage.getItem('sepa_ver');
   if(stored!==VER){
     sessionStorage.setItem('sepa_ver',VER);
@@ -544,13 +544,32 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
     <div class="settings-row">
       <div class="settings-row-label">
         <div class="settings-row-title">Finnhub API Key</div>
-        <div class="settings-row-desc">免費方案：60 次/分鐘</div>
+        <div class="settings-row-desc">選填 · Yahoo 抓不到報價時的備援</div>
       </div>
       <input type="password" class="settings-input settings-input-wide" id="cfg-apikey" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="your_key">
     </div>
   </div>
 
   <button type="button" class="settings-save-btn" id="btn-save-settings">儲存設定</button>
+
+  <div class="settings-card" style="margin-top:24px">
+    <div class="settings-header">💾 資料備份</div>
+    <div class="settings-row">
+      <div class="settings-row-label">
+        <div class="settings-row-title">下載備份</div>
+        <div class="settings-row-desc">持倉、交易記錄與設定（不含 API Key）</div>
+      </div>
+      <button type="button" class="btn-sm" id="btn-backup">下載</button>
+    </div>
+    <div class="settings-row">
+      <div class="settings-row-label">
+        <div class="settings-row-title">從備份還原</div>
+        <div class="settings-row-desc">覆蓋這台裝置上的現有資料</div>
+      </div>
+      <button type="button" class="btn-sm" id="btn-restore">選擇檔案</button>
+      <input type="file" id="restore-file" accept="application/json,.json" style="display:none">
+    </div>
+  </div>
 
   <div class="settings-card" style="margin-top:24px">
     <div class="settings-header">⚠️ 危險區域</div>
@@ -563,7 +582,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
     </div>
   </div>
 
-  <div class="version-tag">SEPA Tracker v5.0 · Minervini SEPA + VCP Strategy</div>
+  <div class="version-tag">SEPA Tracker v5.1 · Minervini SEPA + VCP Strategy</div>
 </div>
 </div>
 
@@ -762,15 +781,6 @@ function fetchMarketState(cb){
   if(marketState.lastCheck > 0 && Date.now() - marketState.lastCheck < 1800000){
     cb && cb(); return;
   }
-  var to = Math.floor(Date.now()/1000);
-  var from = to - 252*24*3600;
-  var url = 'https://query2.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1='+from+'&period2='+to+'&includePrePost=false';
-  function tryFetch(u){
-    return fetch(u,{cache:'no-store'}).then(function(r){
-      if(!r.ok) throw new Error('http '+r.status);
-      return r.json();
-    });
-  }
   function parseSPY(d){
     var res=d&&d.chart&&d.chart.result&&d.chart.result[0];
     if(!res) throw new Error('no result');
@@ -785,12 +795,8 @@ function fetchMarketState(cb){
     marketState.spyMA200    = Math.round(ma200*100)/100;
     marketState.lastCheck   = Date.now();
   }
-  tryFetch(url)
+  yahooChart('SPY')
     .then(parseSPY)
-    .catch(function(){
-      return tryFetch('https://corsproxy.io/?'+encodeURIComponent(url))
-        .then(function(d){ return parseSPY(d.contents?JSON.parse(d.contents):d); });
-    })
     .catch(function(){ marketState.lastCheck = Date.now(); })
     .finally(function(){ cb && cb(); });
 }
@@ -848,10 +854,8 @@ function getGroups(){
 
 // ── Market status ─────────────────────────────────
 function etNow(){
-  var now=new Date(),jan=new Date(now.getFullYear(),0,1),jul=new Date(now.getFullYear(),6,1);
-  var std=Math.max(jan.getTimezoneOffset(),jul.getTimezoneOffset());
-  var dst=now.getTimezoneOffset()<std,off=dst?-4:-5;
-  return new Date(now.getTime()+(now.getTimezoneOffset()+off*60)*60000);
+  // 以紐約時區換算，不依賴瀏覽器所在地是否有夏令時間
+  return new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));
 }
 function updateMkt(){
   var dot=document.getElementById('mkt-dot'),st=document.getElementById('mkt-st'),tm=document.getElementById('mkt-tm');
@@ -866,7 +870,47 @@ function updateMkt(){
 }
 updateMkt(); setInterval(updateMkt,30000);
 
-// ── Finnhub fetch（單支，需 API key）────────────────
+// ── Yahoo chart（經自架 proxy；Yahoo 本身不回 CORS 標頭）──
+var CHART_PROXY='https://sepa-quote-proxy.vercel.app/api/chart';
+var _chartCache={};   // ticker → {ts, p}，報價與 VCP 共用同一次請求
+function yahooChart(ticker){
+  var hit=_chartCache[ticker];
+  if(hit&&Date.now()-hit.ts<60000) return hit.p;
+  var p=fetchWithTimeout(CHART_PROXY+'?symbol='+encodeURIComponent(ticker)+'&range=1y',12000)
+    .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); });
+  _chartCache[ticker]={ts:Date.now(),p:p};
+  p.catch(function(){ delete _chartCache[ticker]; });
+  return p;
+}
+function quoteFromChart(raw){
+  var res=raw&&raw.chart&&raw.chart.result&&raw.chart.result[0];
+  if(!res) throw new Error('no result');
+  var meta=res.meta||{};
+  var q=(res.indicators&&res.indicators.quote&&res.indicators.quote[0])||{};
+  var bars=[];
+  (q.close||[]).forEach(function(c,i){
+    if(c!=null) bars.push({c:c,h:(q.high||[])[i],l:(q.low||[])[i],o:(q.open||[])[i]});
+  });
+  if(!bars.length) throw new Error('no data');
+  var last=bars[bars.length-1];
+  var c=meta.regularMarketPrice||last.c;
+  // 當天那根 K 棒的 close 可能是 null，不能直接取倒數第二根
+  var pc;
+  var rawCloses=q.close||[];
+  var todayMissing=rawCloses.length&&rawCloses[rawCloses.length-1]==null;
+  if(typeof meta.regularMarketChangePercent==='number') pc=c/(1+meta.regularMarketChangePercent/100);
+  else if(todayMissing||bars.length<2) pc=last.c;
+  else pc=bars[bars.length-2].c;
+  return {
+    price:c, prevClose:pc,
+    change1d:pc?(c-pc)/pc*100:0,
+    high:meta.regularMarketDayHigh||last.h||c,
+    low:meta.regularMarketDayLow||last.l||c,
+    open:last.o||c
+  };
+}
+
+// ── Finnhub fetch（單支，需 API key；Yahoo 失敗時的備援）──
 function fetchOne(ticker){
   if(!cfg.apiKey) return Promise.reject(new Error('missing api key'));
   return fetch('https://finnhub.io/api/v1/quote?symbol='+encodeURIComponent(ticker)+'&token='+cfg.apiKey)
@@ -877,32 +921,17 @@ function fetchOne(ticker){
     });
 }
 
-// ── Yahoo v7 批次即時報價（無需 API key）────────────
+// 單支報價：Yahoo 優先，失敗退到 Finnhub
+function fetchQuote(ticker){
+  return yahooChart(ticker).then(quoteFromChart).catch(function(){ return fetchOne(ticker); });
+}
+
+// ── Yahoo 報價（無需 API key；抓不到的代號不會出現在 map）──
 function _fetchBatchYahoo(tickers){
-  var fields='regularMarketPrice,regularMarketPreviousClose,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen';
-  var syms=tickers.join(',');
-  function tryBase(base){
-    return fetch(base+'?symbols='+syms+'&fields='+fields,{cache:'no-store'})
-      .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
-      .then(function(d){
-        var results=(d&&d.quoteResponse&&d.quoteResponse.result)||[];
-        var map={};
-        results.forEach(function(q){
-          var c=q.regularMarketPrice;
-          var pc=q.regularMarketPreviousClose||c;
-          if(c) map[q.symbol]={
-            price:c, prevClose:pc,
-            change1d:pc?(c-pc)/pc*100:0,
-            high:q.regularMarketDayHigh||c,
-            low:q.regularMarketDayLow||c,
-            open:q.regularMarketOpen||c
-          };
-        });
-        return map;
-      });
-  }
-  return tryBase('https://query2.finance.yahoo.com/v7/finance/quote')
-    .catch(function(){ return tryBase('https://query1.finance.yahoo.com/v7/finance/quote'); });
+  var map={};
+  return Promise.all(tickers.map(function(t){
+    return yahooChart(t).then(function(raw){ map[t]=quoteFromChart(raw); }).catch(function(){});
+  })).then(function(){ return map; });
 }
 
 function fetchAll(cb){
@@ -985,6 +1014,14 @@ function parseYahooOHLCV(raw){
   var q=res.indicators&&res.indicators.quote&&res.indicators.quote[0];
   if(!q||!ts.length) throw new Error('no quotes');
   var ohlcv=[];
+  // 當天那根 K 棒若還沒有 close，用 meta 的最新報價補上，VCP 才不會落後一天
+  var meta=res.meta||{}, li=ts.length-1;
+  if(q.close[li]==null && meta.regularMarketPrice){
+    q.close[li]=meta.regularMarketPrice;
+    q.high[li]=q.high[li]||meta.regularMarketDayHigh;
+    q.low[li]=q.low[li]||meta.regularMarketDayLow;
+    q.volume[li]=q.volume[li]||meta.regularMarketVolume;
+  }
   for(var i=0;i<ts.length;i++){
     if(q.close[i]==null) continue;
     ohlcv.push({t:ts[i],o:q.open[i]||q.close[i],h:q.high[i]||q.close[i],
@@ -1005,47 +1042,7 @@ function fetchWithTimeout(url, ms){
 }
 
 function fetchOHLCV(ticker){
-  var to=Math.floor(Date.now()/1000);
-  var from=to-252*24*3600;
-  var sym=encodeURIComponent(ticker);
-  var qs='?interval=1d&period1='+from+'&period2='+to+'&includePrePost=false';
-  var directUrl='https://query2.finance.yahoo.com/v8/finance/chart/'+sym+qs;
-
-  function parseProxy(d){
-    var raw=d.contents?JSON.parse(d.contents):(d.body?JSON.parse(d.body):d);
-    return parseYahooOHLCV(raw);
-  }
-  function viaProxy(url){
-    return fetchWithTimeout(url,10000)
-      .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
-      .then(parseProxy);
-  }
-
-  var attempts=[
-    function(){
-      return fetchWithTimeout(directUrl,6000)
-        .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
-        .then(function(d){return parseYahooOHLCV(d);});
-    },
-    function(){
-      var u1='https://query1.finance.yahoo.com/v8/finance/chart/'+sym+qs;
-      return fetchWithTimeout(u1,6000)
-        .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();})
-        .then(function(d){return parseYahooOHLCV(d);});
-    },
-    function(){
-      return viaProxy('https://corsproxy.io/?'+encodeURIComponent(directUrl));
-    }
-  ];
-
-  function tryNext(idx){
-    if(idx>=attempts.length) return Promise.reject(new Error('all proxies failed'));
-    return attempts[idx]().catch(function(e){
-      console.warn('VCP attempt '+idx+' failed:',e.message);
-      return tryNext(idx+1);
-    });
-  }
-  return tryNext(0);
+  return yahooChart(ticker).then(parseYahooOHLCV);
 }
 
 function fetchVCPAll(cb){
@@ -1409,7 +1406,7 @@ function renderStats(){
   document.getElementById('s-val').textContent=n?money(tv):'—';
   document.getElementById('s-dep').textContent=n?f2(dep,0)+'%':'—';
   document.getElementById('s-loss').textContent=n?money(-ml):'—';
-  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v5.0';
+  document.getElementById('hdr-sub').textContent='Minervini · $'+Number(cfg.capital).toLocaleString()+' USD · '+n+' 支股票 · v5.1';
 
   // 組合風險面板
   var riskEl=document.getElementById('risk-panel');
@@ -1902,7 +1899,7 @@ function executeCustomTrade(ticker,mode,shares,price,date,notes){
     });
     saveLots();store.set('sepa_trade_log',tradeLog);
     renderAll();
-    if(cfg.apiKey) fetchOne(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
+    fetchQuote(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
     toast('✅ '+ticker+' 加碼 '+shares+'股 @ $'+f2(price,2));
   }
 }
@@ -1937,10 +1934,6 @@ function executeCustomTrade(ticker,mode,shares,price,date,notes){
 // ── Full refresh ──────────────────────────────────
 function fullRefresh(){
   if(loading)return;
-  if(!cfg.apiKey){
-    toast('⚠️ 請先到設定輸入 Finnhub API Key');
-    return;
-  }
   loading=true;
   var ic=document.getElementById('ri'),lb=document.getElementById('rl');
   ic.className='spinning';lb.textContent='更新中';
@@ -2006,9 +1999,9 @@ function addLot(){
   document.getElementById('stop-hint').textContent='';
   expanded=ticker;
   renderAll();
-  toast('✅ '+ticker+' '+(lots.filter(function(l){return l.ticker===ticker;}).length>1?'加碼已加入':'已加入')+(cfg.apiKey?' · 抓取報價中…':' · 請到設定輸入 Finnhub API Key'));
-  // Fetch both Finnhub quote and Yahoo OHLCV for VCP
-  if(cfg.apiKey) fetchOne(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
+  toast('✅ '+ticker+' '+(lots.filter(function(l){return l.ticker===ticker;}).length>1?'加碼已加入':'已加入')+' · 抓取報價中…');
+  // Fetch quote and OHLCV for VCP
+  fetchQuote(ticker).then(function(d){prices[ticker]=d;renderAll();}).catch(function(){});
   fetchOHLCV(ticker).then(function(ohlcv){vcpData[ticker]=analyseVCP(ohlcv);renderAll();}).catch(function(){});
 }
 
@@ -2221,38 +2214,44 @@ document.getElementById('btn-copy').addEventListener('click', function(){
   }
 });
 
-// ── One-time data patch: import April 2026 missing trades ────────────────
-(function(){
-  if(store.get('sepa_patched_v1')) return;
-
-  // Remove MU 2026-04-06 lot (sold 4/17, lot was never removed)
-  lots=lots.filter(function(l){
-    return !(l.ticker==='MU'&&l.date==='2026-04-06'&&Math.abs(l.entry-382.30)<0.01);
-  });
-  // Remove WDC lots (sold 4/17, position closed)
-  lots=lots.filter(function(l){ return l.ticker!=='WDC'; });
-  delete tpPhase['WDC'];
-  store.set('sepa_positions',lots);
-  store.set('sepa_tp_phase',tpPhase);
-
-  // Add missing sell records (skip if already present by ticker+date+price)
-  function hasTrade(t,d,p){ return tradeLog.some(function(r){ return r.ticker===t&&r.date===d&&Math.abs(r.price-p)<0.01; }); }
-  function sell(t,d,sh,pr,en){
-    if(hasTrade(t,d,pr)) return;
-    tradeLog.unshift({id:uid(),ticker:t,date:d,action:'SELL_CUSTOM',shares:sh,price:pr,entry:en,
-      pnl:Math.round(sh*(pr-en)*100)/100,pct:Math.round((pr-en)/en*10000)/100,notes:''});
-  }
-  sell('WDC', '2026-04-17', 2, 365.77,   304.81);   // +$122
-  sell('MRVL','2026-04-10', 6, 125.00,   109.00);    // +$96
-  sell('MRVL','2026-04-21', 6, 152.60,   109.00);    // +$262
-  sell('MRVL','2026-04-24', 3, 174.10,   109.00);    // +$195
-  sell('MRVL','2026-04-27', 3, 152.6712, 109.00);    // +$131
-  sell('SITM','2026-04-23', 3, 526.00,   523.76);    // +$7
-  sell('TER', '2026-04-29',10, 333.00,   357.335);   // -$243
-
-  store.set('sepa_trade_log',tradeLog);
-  store.set('sepa_patched_v1','1');
-}());
+// ── Backup / restore（資料只存在這台裝置的 localStorage）──
+var BACKUP_KEYS=['sepa_positions','sepa_tp_phase','sepa_trade_log','sepa_cfg'];
+document.getElementById('btn-backup').addEventListener('click', function(){
+  var data={_app:'sepa-tracker',_version:1,exported:new Date().toISOString()};
+  BACKUP_KEYS.forEach(function(k){ data[k]=store.get(k); });
+  // API key 不寫進備份檔
+  if(data.sepa_cfg) data.sepa_cfg=Object.assign({},data.sepa_cfg,{apiKey:''});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download='sepa-tracker-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+  toast('✅ 備份已下載');
+});
+document.getElementById('btn-restore').addEventListener('click', function(){
+  document.getElementById('restore-file').click();
+});
+document.getElementById('restore-file').addEventListener('change', function(){
+  var file=this.files&&this.files[0];
+  this.value='';
+  if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    var data;
+    try{ data=JSON.parse(reader.result); }catch(e){ toast('⚠️ 檔案不是有效的 JSON'); return; }
+    if(!data||data._app!=='sepa-tracker'||!Array.isArray(data.sepa_positions)){
+      toast('⚠️ 這不是 SEPA Tracker 的備份檔'); return;
+    }
+    var nTrades=Array.isArray(data.sepa_trade_log)?data.sepa_trade_log.length:0;
+    if(!confirm('備份內容：'+data.sepa_positions.length+' 筆持倉、'+nTrades+' 筆交易記錄（'+String(data.exported||'').slice(0,10)+'）。\n還原會覆蓋目前這台裝置上的資料，確定嗎？')) return;
+    store.set('sepa_positions',data.sepa_positions);
+    store.set('sepa_tp_phase',data.sepa_tp_phase||{});
+    store.set('sepa_trade_log',Array.isArray(data.sepa_trade_log)?data.sepa_trade_log:[]);
+    if(data.sepa_cfg) store.set('sepa_cfg',Object.assign({},data.sepa_cfg,{apiKey:cfg.apiKey}));
+    window.location.reload();
+  };
+  reader.readAsText(file);
+});
 
 // ── Init ──────────────────────────────────────────
 document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
